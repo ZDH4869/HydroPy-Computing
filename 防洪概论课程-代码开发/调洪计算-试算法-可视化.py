@@ -3,6 +3,14 @@ import numpy as np
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 import os
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
+import warnings
+warnings.filterwarnings('ignore')
+
+# 设置中文字体
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']  # 用来正常显示中文标签 'Microsoft YaHei', 'SimHei', 'SimSun', 'Arial Unicode MS', 'DejaVu Sans'
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 # ================================
 # 用户参数设置区域
@@ -12,11 +20,14 @@ import os
 flood_process_file = r"E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\原始曲线\3h入库流量过程线.csv"  # 入库流量过程线文件
 storage_curve_file = r"E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\曲线插值\插值水位-库容曲线_linear.csv"  # 水位-库容曲线文件
 discharge_curve_file = r"E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\曲线插值\插值水位-下泄流量曲线_linear.csv"  # 水位-下泄流量曲线文件
-flood_encoding='utf-8' # 读取格式 文件编码 'gbk' 'utf-8' 'latin1'
-storage_curve_encoding='utf-8'
-discharge_curve_encoding='utf-8'
+flood_encoding = 'utf-8'  # 读取格式 文件编码 'gbk' 'utf-8' 'latin1'
+storage_curve_encoding = 'utf-8'
+discharge_curve_encoding = 'utf-8'
 # 输出文件路径
-output_file = "E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\A1_试算法.csv"
+output_file = "E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\试算法-3h.csv"
+
+# 可视化输出路径
+visualization_output = r"E:\水电202303班\大三（上期）\课程报告或小组作业\防洪概论（调洪计算）\代码开发\试算法-结果可视化.png"
 
 # 第一行初始值
 initial_avg_inflow = 0.0  # 时段平均入库流量第一行数值
@@ -45,15 +56,15 @@ def read_data():
     """读取所有输入数据"""
     try:
         # 读取入库洪水过程线
-        flood_data = pd.read_csv(flood_process_file,encoding=flood_encoding)
+        flood_data = pd.read_csv(flood_process_file, encoding=flood_encoding)
         print(f"成功读取入库洪水过程线数据，共{len(flood_data)}行")
 
         # 读取水位-库容曲线
-        storage_curve = pd.read_csv(storage_curve_file,encoding=storage_curve_encoding)
+        storage_curve = pd.read_csv(storage_curve_file, encoding=storage_curve_encoding)
         print(f"成功读取水位-库容曲线数据，共{len(storage_curve)}行")
 
         # 读取水位-下泄流量曲线
-        discharge_curve = pd.read_csv(discharge_curve_file,encoding=discharge_curve_encoding)
+        discharge_curve = pd.read_csv(discharge_curve_file, encoding=discharge_curve_encoding)
         print(f"成功读取水位-下泄流量曲线数据，共{len(discharge_curve)}行")
 
         return flood_data, storage_curve, discharge_curve
@@ -141,6 +152,98 @@ def trial_calculation(row_idx, prev_row, storage_interp, discharge_interp, V_Z_i
                 continue
 
     return best_Z, best_q, best_avg_q, best_delta_V, best_V, min_error
+
+
+# ================================
+# 可视化函数
+# ================================
+
+def create_visualization(flood_data, results):
+    """创建调洪演算结果可视化"""
+    print("正在生成可视化图表...")
+
+    # 创建图形和子图
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+    # 设置时间间隔
+    time_vals = flood_data['时间t/h']
+
+    # 第一个子图：时间-流量曲线
+    # 入库流量
+    inflow_max_idx = flood_data['Q/(m3/s-1)'].idxmax()
+    inflow_max_time = time_vals[inflow_max_idx]
+    inflow_max_value = flood_data['Q/(m3/s-1)'].max()
+
+    # 下泄流量
+    discharge_max_idx = results['下泄流量q/(m³·s⁻¹)'].idxmax()
+    discharge_max_time = time_vals[discharge_max_idx]
+    discharge_max_value = results['下泄流量q/(m³·s⁻¹)'].max()
+
+    # 绘制流量曲线
+    ax1.plot(time_vals, flood_data['Q/(m3/s-1)'], 'b-', linewidth=2, label='入库流量')
+    ax1.plot(time_vals, results['下泄流量q/(m³·s⁻¹)'], 'r-', linewidth=2, label='下泄流量')
+
+    # 标记最大值点
+    ax1.plot(inflow_max_time, inflow_max_value, 'bo', markersize=8, label=f'最大入库流量: {inflow_max_value:.1f} m³/s')
+    ax1.plot(discharge_max_time, discharge_max_value, 'ro', markersize=8,
+             label=f'最大下泄流量: {discharge_max_value:.1f} m³/s')
+
+    # 设置第一个子图属性
+    ax1.set_xlabel('时间 (h)')
+    ax1.set_ylabel('流量 (m³/s)')
+    ax1.set_title('时间-流量过程线')
+    ax1.grid(True, linestyle='--', alpha=0.7)
+    ax1.legend(loc='best')
+
+    # 设置x轴间隔
+    time_min, time_max = time_vals.min(), time_vals.max()
+    time_interval_vis = max(1, (time_max - time_min) // 10)  # 自动计算合适的间隔
+    ax1.set_xticks(np.arange(time_min, time_max + time_interval_vis, time_interval_vis))
+
+    # 设置y轴间隔
+    flow_max = max(inflow_max_value, discharge_max_value)
+    flow_interval = max(50, flow_max // 10)  # 自动计算合适的间隔
+    ax1.set_yticks(np.arange(0, flow_max + flow_interval, flow_interval))
+
+    # 第二个子图：时间-水位曲线
+    # 水库水位
+    water_level_max_idx = results['水库水位Z/m'].idxmax()
+    water_level_max_time = time_vals[water_level_max_idx]
+    water_level_max_value = results['水库水位Z/m'].max()
+
+    # 绘制水位曲线
+    ax2.plot(time_vals, results['水库水位Z/m'], 'g-', linewidth=2, label='水库水位')
+
+    # 标记最大值点
+    ax2.plot(water_level_max_time, water_level_max_value, 'go', markersize=8,
+             label=f'最高水位: {water_level_max_value:.2f} m')
+
+    # 设置第二个子图属性
+    ax2.set_xlabel('时间 (h)')
+    ax2.set_ylabel('水位 (m)')
+    ax2.set_title('时间-水位过程线')
+    ax2.grid(True, linestyle='--', alpha=0.7)
+    ax2.legend(loc='best')
+
+    # 设置x轴间隔（与第一个子图一致）
+    ax2.set_xticks(np.arange(time_min, time_max + time_interval_vis, time_interval_vis))
+
+    # 设置y轴间隔
+    level_min, level_max = results['水库水位Z/m'].min(), results['水库水位Z/m'].max()
+    level_interval = max(0.5, (level_max - level_min) / 10)  # 自动计算合适的间隔
+    ax2.set_yticks(np.arange(level_min, level_max + level_interval, level_interval))
+
+    # 调整布局
+    plt.tight_layout()
+
+    # 保存图像
+    plt.savefig(visualization_output, dpi=300, bbox_inches='tight')
+    print(f"可视化图表已保存到: {visualization_output}")
+
+    # 显示图像
+    plt.show()
+
+    return fig
 
 
 # ================================
@@ -259,6 +362,9 @@ def calculate_flood_routing():
         print(f"最终水位: {results.iloc[-1]['水库水位Z/m']:.2f} m")
         print(f"最终库容: {results.iloc[-1]['水库存水量V/万m³']:.2f} 万m³")
         print(f"最大下泄流量: {results['下泄流量q/(m³·s⁻¹)'].max():.2f} m³/s")
+
+        # 生成可视化图表
+        create_visualization(flood_data, results)
 
         return True
     except Exception as e:
