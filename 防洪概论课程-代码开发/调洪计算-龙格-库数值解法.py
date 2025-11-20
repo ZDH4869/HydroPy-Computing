@@ -29,7 +29,7 @@ INFLOW_ENCODING   = 'utf-8'
 STORAGE_ENCODING  = 'utf-8'
 DISCHARGE_ENCODING= 'utf-8'
 
-# 3. 时间步长（秒）—— 用户可改
+# 3. 时间步长（秒）—— 用户可改 与入库流量过程线的 时间间隔相同（插值间隔）
 DT = 3600*3          # 3600 s = 1 h；可改为 1800、900 等
 
 # 4. 初始状态 V0 —— 用户可改
