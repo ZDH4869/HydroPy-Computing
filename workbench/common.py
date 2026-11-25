@@ -109,19 +109,23 @@ def configure_matplotlib():
 
 
 def read_csv(path) -> pd.DataFrame:
-    """Read a CSV with common Chinese/Windows encodings and clean headers."""
+    """Read a CSV/TXT with common Chinese/Windows encodings and delimiters."""
     last_error = None
     for encoding in ("utf-8-sig", "utf-8", "gb18030", "gbk", "latin1"):
-        try:
-            df = pd.read_csv(path, encoding=encoding)
-            df.columns = [str(col).replace("\ufeff", "").strip() for col in df.columns]
-            return df
-        except UnicodeDecodeError as exc:
-            last_error = exc
-        except pd.errors.EmptyDataError as exc:
-            raise ValueError("CSV 文件为空或无法识别。") from exc
-        except Exception as exc:
-            last_error = exc
+        for sep, engine in ((None, "python"), (",", "c"), ("\t", "c"), (r"\s+", "python")):
+            try:
+                df = pd.read_csv(path, sep=sep, engine=engine, encoding=encoding)
+                if len(df.columns) == 0:
+                    continue
+                df.columns = [str(col).replace("\ufeff", "").strip() for col in df.columns]
+                return df
+            except UnicodeDecodeError as exc:
+                last_error = exc
+                break
+            except pd.errors.EmptyDataError as exc:
+                raise ValueError("CSV 文件为空或无法识别。") from exc
+            except Exception as exc:
+                last_error = exc
     raise ValueError(f"读取 CSV 失败：{last_error}")
 
 
@@ -373,6 +377,7 @@ class RunContext:
     images: list[dict] = field(default_factory=list)
     summary: list[dict] = field(default_factory=list)
     started_at: float = field(default_factory=lambda: datetime.now().timestamp())
+    visuals: dict = field(default_factory=dict)
 
     @property
     def run_dir(self) -> Path:
@@ -391,6 +396,13 @@ class RunContext:
 
     def add_summary(self, label, value, unit=""):
         self.summary.append({"label": str(label), "value": value if isinstance(value, str) else json_safe(value), "unit": unit})
+
+    def add_visual_table(self, name, columns, *series):
+        """Expose already computed series for the browser's playback."""
+        self.visuals[name] = {
+            "columns": columns,
+            "rows": json_safe(list(zip(*series))),
+        }
 
     def save_csv(self, df: pd.DataFrame, filename: str, *, title=None, limit=200):
         name = safe_name(filename)
@@ -480,7 +492,7 @@ def locate_shapefile(source):
 def cleanup_runtime(max_age_hours=48):
     ensure_dirs()
     now = datetime.now().timestamp()
-    for base in (UPLOAD_DIR, RUN_DIR):
+    for base in (UPLOAD_DIR, RUN_DIR, RUNTIME_DIR / "shp"):
         for child in base.iterdir() if base.exists() else []:
             try:
                 if child.is_dir() and now - child.stat().st_mtime > max_age_hours * 3600:

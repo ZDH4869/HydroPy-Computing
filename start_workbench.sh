@@ -7,7 +7,7 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! python3 -c "import flask" >/dev/null 2>&1; then
+if ! python3 -c "import pandas, numpy, scipy, matplotlib, flask" >/dev/null 2>&1; then
   echo "首次运行，正在安装依赖..."
   python3 -m pip install -r requirements.txt
 fi

@@ -149,6 +149,7 @@ def create_app():
                         "summary": result.get("summary", []),
                         "tables": result.get("tables", []),
                         "images": result.get("images", []),
+                        "visuals": ctx.visuals,
                     }
                 )
             except Exception as exc:

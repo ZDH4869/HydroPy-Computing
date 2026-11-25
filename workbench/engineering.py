@@ -102,6 +102,8 @@ def run_linear_interp(ctx, params, files):
     ctx.add_summary("插值洪峰", fmt(float(np.max(full_flow)), 1), "m³/s")
 
     ctx.save_csv(result, "等间隔线性插值结果.csv", title="等间隔插值结果")
+    ctx.add_visual_table("observations", ["时间", "观测流量"], times.dt.strftime("%Y-%m-%d %H:%M:%S"), flow)
+    ctx.visuals["interpolation_times"] = full_times.dt.strftime("%Y-%m-%d %H:%M:%S").tolist()
 
     fig, ax = plt.subplots(figsize=(8.8, 5.2))
     ax.plot(times, flow, "o", color=ORANGE, markersize=4, alpha=0.75, label="原始观测点")
@@ -153,6 +155,8 @@ def run_multi_interp(ctx, params, files):
         ctx.add_summary(name, fmt(float(np.max(values)), 1), "m³/s")
     ctx.add_summary("插值点数", len(result), "个")
     ctx.save_csv(result, "多种插值对比结果.csv", title="多种插值结果")
+    ctx.add_visual_table("observations", ["时间", "观测流量"], times.dt.strftime("%Y-%m-%d %H:%M:%S"), flow)
+    ctx.visuals["interpolation_times"] = full_times.dt.strftime("%Y-%m-%d %H:%M:%S").tolist()
 
     fig, ax = plt.subplots(figsize=(8.8, 5.4))
     ax.plot(times, flow, "o", color="#f8fafc", markersize=3, alpha=0.5, label="原始观测")
@@ -249,7 +253,11 @@ def _run_max_volume(ctx, params, files, *, title, table_name, image_name):
     result, windows = _max_volume_table(times, flow, durations, smooth_points)
     if result.empty:
         raise ValueError("数据时长不足以计算所选时段，请减小统计时段或提供更长的数据。")
-    ctx.save_csv(result, table_name, title="时段最大洪量")
+    ctx.save_csv(result, table_name, title=title)
+    ctx.add_visual_table("observations", ["时间", "流量"], times.dt.strftime("%Y-%m-%d %H:%M:%S"), flow)
+    for duration in durations:
+        if duration not in windows:
+            ctx.log(f"{format_duration(duration)}：数据时长不足，已跳过。")
     for _, row in result.iterrows():
         ctx.log(
             f"{row['统计时段']}：{row['梯形法洪量/万m³']} 万m³，"

@@ -1,717 +1,611 @@
-/* ============================================================
-   HydroLab · Hydrology Workbench front-end
-   ============================================================ */
-(() => {
-  "use strict";
+import { drawTerrain, inputCharts, mountChart, parseResultCsv, resultCharts } from "./charts.js";
 
-  const ICONS = {
-    river: `<svg viewBox="0 0 24 24" fill="none"><path d="M3 8.5C6 5.8 8.2 5.8 11 8.5C13.8 11.2 16 11.2 19 8.5M3 14C6 11.3 8.2 11.3 11 14C13.8 16.7 16 16.7 19 14M3 19.5C6 16.8 8.2 16.8 11 19.5C13.8 22.2 16 22.2 19 19.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
-    satellite: `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 4.5L8.1 8.1M15.9 15.9L19.5 19.5M19.5 4.5L15.9 8.1M8.1 15.9L4.5 19.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="8.6" stroke="currentColor" stroke-width="1.1" stroke-dasharray="2 3" opacity=".5"/></svg>`,
-    dam: `<svg viewBox="0 0 24 24" fill="none"><path d="M4 20L6 7H18L20 20H4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M3 12.5C6 10.5 8 14 11 12C14 10 16 13.5 21 11.5M4 17.5C7 15.5 9 18.4 12 16.5C15 14.6 17 17.5 20 15.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-    droplet: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3C8.5 8.2 5.5 12 5.5 15.5C5.5 19.1 8.4 21.5 12 21.5C15.6 21.5 18.5 19.1 18.5 15.5C18.5 12 15.5 8.2 12 3Z" stroke="currentColor" stroke-width="1.7"/><path d="M9 16C10.4 14.3 11.3 14.3 12.4 16C13.5 17.7 14.5 17.7 16 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-    upload: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4M7.5 8.5L12 4L16.5 8.5M5 15V19H19V15" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    file: `<svg viewBox="0 0 24 24" fill="none"><path d="M6 3.5H14L18.5 8V20.5H6V3.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 3.5V8H18.5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
-    download: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 4V15M8 11L12 15L16 11M5 19H19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    image: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="9" cy="10" r="1.4" fill="currentColor"/><path d="M4.5 17L9.5 12.5L13 15.5L16.2 13L20 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-    terminal: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M7 9L10.5 12L7 15M12.5 15H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-    table: `<svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 9H20.5M9 9V19.5M15 9V19.5" stroke="currentColor" stroke-width="1.3"/></svg>`,
-    play: `<svg viewBox="0 0 24 24" fill="none"><path d="M8 5.5L18.5 12L8 18.5V5.5Z" fill="currentColor"/></svg>`,
-    spark: `<svg viewBox="0 0 24 24" fill="none"><path d="M12 3L13.9 9.6L20.5 11.5L13.9 13.4L12 20L10.1 13.4L3.5 11.5L10.1 9.6L12 3Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+const ICONS = {
+  river: '<path d="M3 7c3-3 6-3 9 0s6 3 9 0M3 12c3-3 6-3 9 0s6 3 9 0M3 17c3-3 6-3 9 0s6 3 9 0"/>',
+  satellite: '<circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8.5" stroke-dasharray="2 3"/><path d="m4 4 4 4m8 8 4 4M20 4l-4 4M8 16l-4 4"/>',
+  dam: '<path d="m5 19 2-14h10l2 14M3 11c2.5-2 4.5 2 7 0s4.5 2 7 0 3.5-1 4 0M3 17c2.5-2 4.5 2 7 0s4.5 2 7 0 3.5-1 4 0"/>',
+  file: '<path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/>',
+  upload: '<path d="M12 15V4M8 8l4-4 4 4M5 15v5h14v-5"/>',
+  download: '<path d="M12 4v11m-4-4 4 4 4-4M5 17v3h14v-3"/>',
+  chart: '<path d="M4 4v16h16M7 15l4-5 4 2 5-7"/>',
+  play: '<path d="m9 6 9 6-9 6z" fill="currentColor" stroke="none"/>',
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  expand: '<path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/>',
+};
+
+const $ = (selector, root = document) => root.querySelector(selector);
+const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+const format = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 6 });
+const escapeHtml = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+const icon = (name) => `<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
+const count = (value) => format.format(value);
+const valueText = (value) => value === null || value === undefined || value === ""
+  ? "—"
+  : typeof value === "number" ? format.format(value) : String(value);
+
+let catalog;
+let workspace;
+let activeRun;
+let unmountPlot;
+let lightboxTrigger;
+const viewKey = { input: "输入", output: "结果", original: "原始图" };
+
+async function api(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({ error: `服务器返回 HTTP ${response.status}` }));
+  if (!response.ok) throw Object.assign(new Error(data.error || `HTTP ${response.status}`), { payload: data });
+  return data;
+}
+
+function toast(title, message = "", error = false) {
+  const node = document.createElement("div");
+  node.className = `toast${error ? " error" : ""}`;
+  node.innerHTML = `<strong>${escapeHtml(title)}</strong>${message ? `<span>${escapeHtml(message)}</span>` : ""}`;
+  $("#toastStack").append(node);
+  window.setTimeout(() => node.remove(), 5000);
+}
+
+function setEngine(ready, label) {
+  $("#engineStatus").innerHTML = `<span class="status-dot ${ready ? "ready" : "error"}"></span>${label}`;
+}
+
+function buildWorkspace(algo) {
+  const files = Object.fromEntries(algo.files.map((spec) => [spec.key, {
+    spec, token: spec.sample ? `sample:${spec.sample}` : null, name: spec.sample || "",
+    sample: Boolean(spec.sample), preview: null, loading: false, uploading: false, error: "",
+  }]));
+  return {
+    algo, files, fileKey: algo.files.find((spec) => spec.sample)?.key || algo.files[0]?.key,
+    inputGroup: 0, outputGroup: 0, view: "input", result: null, changed: false,
   };
+}
 
-  const state = {
-    catalog: null,
-    courses: [],
-    algorithms: [],
-    courseId: null,
-    algoId: null,
-    algo: null,
-    files: {},
-    activeDataTab: null,
-    params: {},
-    result: null,
-    resultTableIndex: 0,
-    running: false,
-    lastDataPreview: null,
-  };
+function selectAlgorithm(id, reset = false) {
+  const algo = catalog.algorithms.find((item) => item.id === id);
+  if (!algo || (workspace?.algo.id === id && !reset)) return;
+  workspace = buildWorkspace(algo);
+  history.replaceState(null, "", `#${algo.id}`);
+  renderNavigation();
+  renderSettings();
+  renderChart();
+  renderDetails();
+  updateRunState();
+  if (workspace.fileKey) loadPreview(workspace, workspace.fileKey);
+}
 
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
-  const escapeHtml = (value) =>
-    String(value ?? "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
+function renderNavigation() {
+  const course = catalog.courses.find((item) => item.id === workspace.algo.course);
+  const algorithms = catalog.algorithms.filter((algo) => algo.course === course.id);
+  $("#courseTabs").innerHTML = catalog.courses.map((item) =>
+    `<button class="course-tab" type="button" data-course="${item.id}" aria-pressed="${item.id === course.id}">
+       ${icon(item.icon)}<span>${escapeHtml(item.name)}</span></button>`
+  ).join("");
+  $("#algoCount").textContent = `${algorithms.length} 项`;
+  $("#algoRail").innerHTML = algorithms.map((algo) =>
+    `<button class="algorithm" type="button" data-algo="${algo.id}" aria-pressed="${algo.id === workspace.algo.id}">
+       <span class="algorithm-mark">${icon(course.icon)}</span>
+       <span class="algorithm-title">${escapeHtml(algo.name)}</span>${icon("chevron")}</button>`
+  ).join("");
+  $("#breadcrumb").textContent = course.name;
+  $("#algoTitle").textContent = workspace.algo.name;
+  $("#algoDescription").textContent = workspace.algo.short || workspace.algo.description;
+}
 
-  const icon = (name, cls = "") =>
-    `<span class="icon ${cls}" aria-hidden="true">${ICONS[name] || ICONS.droplet}</span>`;
-
-  function formatCell(value) {
-    if (value === null || value === undefined || value === "") return "—";
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) return "—";
-      const abs = Math.abs(value);
-      if (abs >= 1000) return value.toLocaleString("zh-CN", { maximumFractionDigits: 3 });
-      if (abs > 0 && abs < 0.0001) return value.toExponential(3);
-      return Number(value.toFixed(4)).toString();
-    }
-    return String(value);
+function fieldHtml(field) {
+  const id = `field-${field.key}`;
+  const value = field.default ?? "";
+  const attrs = `id="${id}" data-field="${field.key}"${field.help ? ` aria-describedby="${id}-help"` : ""}`;
+  let control;
+  if (field.type === "select") {
+    control = `<select ${attrs}>${field.options.map((option) => {
+      const key = typeof option === "string" ? option : option.value;
+      const label = typeof option === "string" ? option : option.label;
+      return `<option value="${escapeHtml(key)}"${String(key) === String(value) ? " selected" : ""}>${escapeHtml(label)}</option>`;
+    }).join("")}</select>`;
+  } else if (field.type === "column") {
+    control = `<select ${attrs} data-column="true"><option value="${escapeHtml(value)}">${escapeHtml(value || "选择数据后可用")}</option></select>`;
+  } else if (field.type === "textarea") {
+    control = `<textarea ${attrs} rows="3">${escapeHtml(value)}</textarea>`;
+  } else {
+    const type = field.type === "number" ? "number" : "text";
+    const limits = ["min", "max", "step"].filter((key) => field[key] !== undefined)
+      .map((key) => `${key}="${escapeHtml(field[key])}"`).join(" ");
+    control = `<input ${attrs} type="${type}" value="${escapeHtml(value)}" ${limits} autocomplete="off">`;
   }
+  return `<div class="field${field.full || field.type === "column" || field.type === "textarea" ? " full" : ""}">
+    <label for="${id}">${escapeHtml(field.label)}${field.unit ? ` (${escapeHtml(field.unit)})` : ""}</label>
+    ${control}${field.help ? `<small id="${id}-help">${escapeHtml(field.help)}</small>` : ""}</div>`;
+}
 
-  function formatNumber(value, digits = 3) {
-    const num = Number(value);
-    if (!Number.isFinite(num)) return String(value ?? "—");
-    return num.toLocaleString("zh-CN", { maximumFractionDigits: digits });
-  }
+function renderSettings() {
+  const fields = workspace.algo.fields;
+  const advanced = fields.filter((field) => field.advanced);
+  $("#paramsBlock").hidden = fields.length === 0;
+  $("#inputBlock").hidden = workspace.algo.files.length === 0;
+  $("#paramFields").innerHTML = fields.filter((field) => !field.advanced).map(fieldHtml).join("");
+  $("#advancedFields").innerHTML = advanced.map(fieldHtml).join("");
+  $("#advancedBox").hidden = advanced.length === 0;
+  $("#advancedBox").open = false;
+  renderFiles();
+}
 
-  function toast(title, message = "", type = "success") {
-    const stack = $("#toastStack");
-    const node = document.createElement("div");
-    node.className = `toast ${type}`;
-    node.innerHTML = `<strong>${escapeHtml(title)}</strong>${message ? escapeHtml(message) : ""}`;
-    stack.appendChild(node);
-    window.setTimeout(() => {
-      node.style.opacity = "0";
-      node.style.transform = "translateY(8px)";
-      window.setTimeout(() => node.remove(), 220);
-    }, 3600);
-  }
+function renderFiles() {
+  $("#fileList").innerHTML = Object.entries(workspace.files).map(([key, file]) => {
+    const title = escapeHtml(file.spec.label);
+    const name = escapeHtml(file.name || "选择文件");
+    return `<div class="file-card${file.uploading ? " uploading" : ""}" data-drop="${key}" aria-busy="${file.uploading}">
+      <span class="file-ico">${icon("file")}</span>
+      <div class="file-info">
+        <button class="file-preview" type="button" data-preview-file="${key}" title="查看${title}">${title}</button>
+        <div class="file-name" title="${name}">${file.uploading ? "正在上传…" : name}</div>
+      </div>
+      ${!file.spec.required && file.token ? `<button class="clear-file" type="button" data-clear="${key}" aria-label="移除${title}" title="移除可选文件">×</button>` : ""}
+      <button class="icon-button" type="button" data-upload="${key}" aria-label="上传${title}" title="上传 ${escapeHtml(file.spec.accept)}" ${file.uploading ? "disabled" : ""}>${icon("upload")}</button>
+      <input type="file" accept="${escapeHtml(file.spec.accept)}" data-file-input="${key}" hidden>
+    </div>`;
+  }).join("");
+}
 
-  async function api(url, options = {}) {
-    const response = await fetch(url, options);
-    const data = await response.json().catch(() => ({ ok: false, error: "服务器返回了无法解析的内容。" }));
-    if (!response.ok && !data.error) data.error = `HTTP ${response.status}`;
-    return data;
-  }
+function refreshColumns(preview) {
+  if (!preview?.columns?.length) return;
+  $$("[data-column]").forEach((select) => {
+    const current = select.value;
+    select.replaceChildren(...preview.columns.map((name) => new Option(name, name)));
+    select.value = preview.columns.includes(current) ? current : preview.columns[0];
+  });
+}
 
-  function courseColor(courseId) {
-    return state.courses.find((course) => course.id === courseId)?.color || "#22d3ee";
-  }
+function getInputGroup(context) {
+  const file = context.files[context.fileKey];
+  const x = file?.spec.key === "curve_csv" ? $("#field-x_col")?.value : undefined;
+  return inputCharts(file?.preview, x, context.fileKey);
+}
 
-  function setStatus(kind, text) {
-    const el = $("#engineStatus");
-    el.innerHTML = `<span class="status-dot ${kind}"></span><span class="status-label">${escapeHtml(text)}</span>`;
-  }
-
-  function renderCourseTabs() {
-    const wrap = $("#courseTabs");
-    wrap.innerHTML = state.courses
-      .map((course) => {
-        const active = course.id === state.courseId ? "active" : "";
-        return `<button class="course-tab ${active}" data-course="${course.id}" style="--accent:${course.color}" type="button">
-          <span class="tab-icon">${ICONS[course.icon] || ICONS.droplet}</span>
-          <span><strong>${escapeHtml(course.name)}</strong><small>${escapeHtml(course.subtitle)}</small></span>
-        </button>`;
-      })
-      .join("");
-    $$(".course-tab", wrap).forEach((button) => {
-      button.addEventListener("click", () => selectCourse(button.dataset.course));
-    });
-  }
-
-  function renderAlgoRail() {
-    const wrap = $("#algoRail");
-    const algos = state.algorithms.filter((algo) => algo.course === state.courseId);
-    const course = state.courses.find((item) => item.id === state.courseId);
-    $("#algoCount").textContent = `${String(algos.length).padStart(2, "0")} 个算法`;
-    $("#courseLabel").textContent = course?.name || "";
-    wrap.innerHTML = algos
-      .map((algo, index) => {
-        const active = algo.id === state.algoId ? "active" : "";
-        return `<button class="algo-card ${active}" data-algo="${algo.id}" style="--card-accent:${course?.color || "#22d3ee"}" type="button">
-          <span class="algo-index">${String(index + 1).padStart(2, "0")}</span>
-          <span class="algo-copy"><strong>${escapeHtml(algo.name)}</strong><small>${escapeHtml(algo.short)}</small></span>
-          <span class="algo-arrow">↗</span>
-        </button>`;
-      })
-      .join("");
-    $$(".algo-card", wrap).forEach((button) => {
-      button.addEventListener("click", () => selectAlgorithm(button.dataset.algo));
-    });
-  }
-
-  function selectCourse(courseId) {
-    if (state.courseId === courseId && state.algoId) return;
-    state.courseId = courseId;
-    const first = state.algorithms.find((algo) => algo.course === courseId);
-    renderCourseTabs();
-    if (first) selectAlgorithm(first.id, { keepCourse: true });
-  }
-
-  function selectAlgorithm(algoId, options = {}) {
-    const algo = state.algorithms.find((item) => item.id === algoId);
-    if (!algo) return;
-    state.algoId = algoId;
-    state.algo = algo;
-    state.courseId = algo.course;
-    state.result = null;
-    state.resultTableIndex = 0;
-    state.activeDataTab = null;
-    state.params = {};
-    state.files = {};
-    state.lastDataPreview = null;
-
-    // Reset each algorithm's file defaults from the catalog.
-    (algo.files || []).forEach((spec) => {
-      state.params[spec.key] = null;
-      state.files[spec.key] = {
-        spec,
-        token: spec.sample ? `sample:${spec.sample}` : null,
-        name: spec.sample || "未选择文件",
-        isSample: Boolean(spec.sample),
-        preview: null,
-        loading: false,
-      };
-    });
-    (algo.fields || []).forEach((field) => {
-      state.params[field.key] = field.default ?? "";
-    });
-
-    renderCourseTabs();
-    renderAlgoRail();
-    renderParamPanel();
-    renderFileList();
-    renderDataPanel();
-    renderResult();
-    setResultState("idle", "等待运行");
-    $("#resultState").innerHTML = `<span class="status-dot idle"></span><span>等待运行</span>`;
-
-    const firstFile = (algo.files || []).find((spec) => state.files[spec.key]?.token);
-    if (firstFile) {
-      state.activeDataTab = firstFile.key;
-      loadPreview(firstFile.key);
-    } else {
-      renderDataPanel();
-    }
-
-    if (!options.keepCourse) {
-      $("#workbench").scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }
-
-  function renderParamPanel() {
-    const algo = state.algo;
-    const course = state.courses.find((item) => item.id === algo.course);
-    $("#paramTitle").textContent = algo.name;
-    $("#paramIcon").innerHTML = ICONS[course?.icon] || ICONS.droplet;
-    const execIcon = $("#execIcon");
-    if (execIcon) execIcon.innerHTML = ICONS.terminal;
-    const execScript = $("#execScript");
-    if (execScript) execScript.textContent = algo.script || "workbench/engine";
-    $("#algoIntro").innerHTML = `
-      <h3>${escapeHtml(algo.name)}</h3>
-      <p>${escapeHtml(algo.description || algo.short || "")}</p>
-      <div class="tag-row">${(algo.tags || []).map((tag) => `<span class="tag">${escapeHtml(tag)}</span>`).join("")}</div>
-    `;
-    const fields = algo.fields || [];
-    const normal = fields.filter((field) => !field.advanced);
-    const advanced = fields.filter((field) => field.advanced);
-    $("#paramFields").innerHTML = normal.map(fieldHtml).join("");
-    $("#advancedFields").innerHTML = advanced.map(fieldHtml).join("");
-    $("#advancedBox").hidden = advanced.length === 0;
-    bindFieldEvents($("#paramFields"));
-    bindFieldEvents($("#advancedFields"));
-  }
-
-  function fieldHtml(field) {
-    const value = state.params[field.key] ?? field.default ?? "";
-    const help = field.help ? `<small>${escapeHtml(field.help)}</small>` : "";
-    const label = `<label for="field-${field.key}"><span>${escapeHtml(field.label)}${field.unit ? ` <span class="unit">${escapeHtml(field.unit)}</span>` : ""}</span></label>`;
-    let control = "";
-    if (field.type === "select") {
-      control = `<select id="field-${field.key}" data-param-key="${field.key}">
-        ${(field.options || []).map((option) => {
-          const val = typeof option === "string" ? option : option.value;
-          const text = typeof option === "string" ? option : option.label;
-          return `<option value="${escapeHtml(val)}" ${String(val) === String(value) ? "selected" : ""}>${escapeHtml(text)}</option>`;
-        }).join("")}
-      </select>`;
-    } else if (field.type === "column") {
-      const options = state.lastDataPreview?.columns || [];
-      control = `<select id="field-${field.key}" data-param-key="${field.key}" data-column-select="true">
-        <option value="${escapeHtml(value)}">${escapeHtml(value || "上传数据后选择")}</option>
-      </select>`;
-      if (options.length) {
-        control = `<select id="field-${field.key}" data-param-key="${field.key}" data-column-select="true">
-          ${options.map((col) => `<option value="${escapeHtml(col)}" ${col === value ? "selected" : ""}>${escapeHtml(col)}</option>`).join("")}
-        </select>`;
-      }
-    } else if (field.type === "textarea") {
-      control = `<textarea id="field-${field.key}" data-param-key="${field.key}" rows="3">${escapeHtml(value)}</textarea>`;
-    } else {
-      const type = field.type === "number" ? "number" : "text";
-      const min = field.min !== undefined ? `min="${field.min}"` : "";
-      const max = field.max !== undefined ? `max="${field.max}"` : "";
-      const step = field.step !== undefined ? `step="${field.step}"` : "";
-      control = `<input id="field-${field.key}" data-param-key="${field.key}" type="${type}" value="${escapeHtml(value)}" ${min} ${max} ${step} autocomplete="off">`;
-    }
-    return `<div class="field ${field.full ? "full" : ""}">${label}${control}${help}</div>`;
-  }
-
-  function bindFieldEvents(root) {
-    $$("[data-param-key]", root).forEach((input) => {
-      const update = () => {
-        const key = input.dataset.paramKey;
-        if (input.type === "number") {
-          const num = Number(input.value);
-          state.params[key] = Number.isFinite(num) ? num : input.value;
-        } else {
-          state.params[key] = input.value;
-        }
-      };
-      input.addEventListener("input", update);
-      input.addEventListener("change", update);
-    });
-  }
-
-  function refreshColumnSelects(preview) {
-    $$("[data-column-select]", document).forEach((select) => {
-      const current = state.params[select.dataset.paramKey] ?? select.value;
-      if (!preview?.columns?.length) return;
-      const options = preview.columns;
-      const next = options.includes(current) ? current : options[0];
-      state.params[select.dataset.paramKey] = next;
-      select.innerHTML = options
-        .map((col) => `<option value="${escapeHtml(col)}" ${col === next ? "selected" : ""}>${escapeHtml(col)}</option>`)
-        .join("");
-    });
-  }
-
-  function renderFileList() {
-    const wrap = $("#fileList");
-    const specs = state.algo?.files || [];
-    wrap.innerHTML = specs
-      .map((spec) => {
-        const file = state.files[spec.key] || {};
-        const has = Boolean(file.token);
-        const badge = file.isSample ? `<span class="file-badge">示例</span>` : "";
-        const optional = !spec.required;
-        const actionClear = optional && has ? `<button class="mini-button text" data-clear="${spec.key}" title="不使用该文件">清空</button>` : "";
-        return `<div class="file-card ${has ? "has-file" : ""}" data-file-card="${spec.key}">
-          <span class="file-icon">${ICONS.file}</span>
-          <span class="file-copy">
-            <strong>${escapeHtml(spec.label)}${badge}</strong>
-            <small>${has ? escapeHtml(file.name) : `点击上传 ${escapeHtml(spec.accept)}${spec.required ? "" : " · 可选"}`}</small>
-          </span>
-          <span class="file-actions">
-            ${actionClear}
-            <button class="mini-button" data-upload="${spec.key}" title="上传文件">↥</button>
-            <input type="file" accept="${escapeHtml(spec.accept)}" data-file-input="${spec.key}" hidden>
-          </span>
-        </div>`;
-      })
-      .join("");
-
-    $$("[data-upload]", wrap).forEach((button) => {
-      button.addEventListener("click", (event) => {
-        event.stopPropagation();
-        $(`[data-file-input="${button.dataset.upload}"]`, wrap)?.click();
-      });
-    });
-    $$("[data-file-input]", wrap).forEach((input) => {
-      input.addEventListener("change", () => {
-        const file = input.files?.[0];
-        if (file) uploadFile(input.dataset.fileInput, file);
-        input.value = "";
-      });
-    });
-    $$("[data-clear]", wrap).forEach((button) => {
-      button.addEventListener("click", () => {
-        const key = button.dataset.clear;
-        const entry = state.files[key];
-        entry.token = null;
-        entry.isSample = false;
-        entry.name = "未选择文件";
-        entry.preview = null;
-        renderFileList();
-        renderDataPanel();
-      });
-    });
-    $$("[data-file-card]", wrap).forEach((card) => {
-      const key = card.dataset.fileCard;
-      card.addEventListener("dragover", (event) => {
-        event.preventDefault();
-        card.classList.add("dragover");
-      });
-      card.addEventListener("dragleave", () => card.classList.remove("dragover"));
-      card.addEventListener("drop", (event) => {
-        event.preventDefault();
-        card.classList.remove("dragover");
-        const file = event.dataTransfer?.files?.[0];
-        if (file) uploadFile(key, file);
-      });
-    });
-  }
-
-  async function uploadFile(key, file) {
-    const entry = state.files[key];
-    if (!entry) return;
-    const spec = entry.spec;
-    if (!spec.accept.split(",").some((ext) => file.name.toLowerCase().endsWith(ext.trim().replace("*", "")))) {
-      toast("文件类型不匹配", `请上传 ${spec.accept} 文件。`, "error");
-      return;
-    }
-    const card = $(`[data-file-card="${key}"]`);
-    card?.classList.add("loading");
-    const form = new FormData();
-    form.append("file", file);
-    form.append("role", spec.role || "");
-    try {
-      const data = await api("/api/upload", { method: "POST", body: form });
-      if (!data.ok) throw new Error(data.error || "上传失败");
-      entry.token = data.token;
-      entry.name = data.name || file.name;
-      entry.isSample = false;
+async function loadPreview(context, key) {
+  const entry = context.files[key];
+  if (!entry?.token || entry.loading || entry.preview) return;
+  const token = entry.token;
+  entry.loading = true;
+  entry.error = "";
+  if (workspace === context && context.view === "input") renderChart();
+  try {
+    const data = await api(`/api/preview?token=${encodeURIComponent(token)}`);
+    if (entry.token === token) {
       entry.preview = data;
-      state.activeDataTab = key;
-      renderFileList();
-      renderDataPanel();
-      refreshColumnSelects(data);
-      toast("文件已就绪", data.name || file.name);
-    } catch (error) {
-      toast("上传失败", error.message, "error");
-    } finally {
-      card?.classList.remove("loading");
+      if (workspace === context && key === context.fileKey) refreshColumns(data);
+    }
+  } catch (error) {
+    if (entry.token === token) entry.error = error.message;
+  } finally {
+    entry.loading = false;
+    if (workspace === context && context.view === "input" && key === context.fileKey) renderChart();
+  }
+}
+
+async function uploadFile(key, file) {
+  const context = workspace;
+  const entry = context.files[key];
+  if (entry.uploading) return;
+  if (!entry.spec.accept.split(",").some((extension) => file.name.toLowerCase().endsWith(extension.trim()))) {
+    toast("文件格式不匹配", `请选择 ${entry.spec.accept} 文件`, true);
+    return;
+  }
+  entry.uploading = true;
+  renderFiles();
+  updateRunState();
+  const form = new FormData();
+  form.append("file", file);
+  form.append("role", entry.spec.role || "");
+  try {
+    const data = await api("/api/upload", { method: "POST", body: form });
+    Object.assign(entry, { token: data.token, name: data.name || file.name, sample: false, preview: data, error: "" });
+    if (workspace === context) {
+      context.fileKey = key;
+      context.inputGroup = 0;
+      context.view = "input";
+      refreshColumns(data);
+      markEdited();
+      renderChart();
+      toast("文件已载入", entry.name);
+    }
+  } catch (error) {
+    if (workspace === context) toast("上传失败", error.message, true);
+  } finally {
+    entry.uploading = false;
+    if (workspace === context) {
+      renderFiles();
+      updateRunState();
     }
   }
+}
 
-  async function loadPreview(key) {
-    const entry = state.files[key];
-    if (!entry || !entry.token) {
-      entry.preview = null;
-      renderDataPanel();
-      return;
-    }
-    if (entry.preview) {
-      state.lastDataPreview = entry.preview;
-      renderDataPanel();
-      refreshColumnSelects(entry.preview);
-      return;
-    }
-    entry.loading = true;
-    renderDataPanel();
-    try {
-      const data = await api(`/api/preview?token=${encodeURIComponent(entry.token)}`);
-      if (!data.ok && data.error) throw new Error(data.error);
-      delete data.ok;
-      entry.preview = data;
-      state.lastDataPreview = data;
-      refreshColumnSelects(data);
-    } catch (error) {
-      toast("数据预览失败", error.message, "error");
-      entry.preview = null;
-    } finally {
-      entry.loading = false;
-      renderDataPanel();
-    }
+function chooseFile(key) {
+  if (!workspace.files[key]) return;
+  workspace.fileKey = key;
+  workspace.inputGroup = 0;
+  workspace.view = "input";
+  refreshColumns(workspace.files[key].preview);
+  renderChart();
+  loadPreview(workspace, key);
+}
+
+function choiceButtons(items, selected, key) {
+  return items.map(({ value, label }) =>
+    `<button type="button" data-${key}="${escapeHtml(value)}" aria-pressed="${value === selected}">${escapeHtml(label)}</button>`
+  ).join("");
+}
+
+function setChoices(element, items, selected, key) {
+  element.hidden = items.length < 2;
+  element.innerHTML = element.hidden ? "" : choiceButtons(items, selected, key);
+}
+
+function emptyChart(title, description, busy = false) {
+  $("#chartMount").innerHTML = `<div class="empty-chart${busy ? " busy" : ""}">
+    <div class="empty-icon">${icon("chart")}</div>
+    <strong>${escapeHtml(title)}</strong><p>${escapeHtml(description)}</p></div>`;
+}
+
+function compactTable(table, limit = 6) {
+  const rows = table.rows.slice(0, limit);
+  const { columns, total_rows } = table;
+  const download = table.csv_url
+    ? `<a class="download-link" href="${escapeHtml(table.csv_url)}" download>${icon("download")} 下载 CSV</a>`
+    : "";
+  const grid = rows.length && columns.length ? `<div class="table-wrap" tabindex="0" role="region" aria-label="${escapeHtml(table.title || table.name || "数据预览")}"><table>
+    <thead><tr>${columns.map((column) => `<th scope="col">${escapeHtml(column)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((row) => `<tr>${columns.map((_, index) => `<td>${escapeHtml(valueText(row[index]))}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table></div>` : "";
+  return `<div class="table-meta"><span>${rows.length ? `前 ${rows.length} 行 · ` : ""}共 ${count(total_rows)} 行</span>${download}</div>${grid}`;
+}
+
+function showOriginal(images) {
+  $("#chartMount").innerHTML = `<div class="figures">${images.map((image, index) =>
+    `<figure class="result-figure"><button type="button" data-figure="${index}" aria-label="放大${escapeHtml(image.title)}">
+      <img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.title)}"><span class="zoom-icon">${icon("expand")}</span>
+    </button><figcaption>${escapeHtml(image.title)}</figcaption></figure>`
+  ).join("")}</div>`;
+}
+
+function renderChart() {
+  unmountPlot?.();
+  unmountPlot = undefined;
+  const context = workspace;
+  const result = context.result;
+  const files = context.algo.files;
+  const focused = document.activeElement;
+  const views = [{ value: "input", label: viewKey.input }, { value: "output", label: viewKey.output }];
+  if (result?.groups.length && result.images?.length) views.push({ value: "original", label: viewKey.original });
+  $("#viewSwitch").innerHTML = choiceButtons(views, context.view, "view");
+  setChoices($("#fileTabs"), context.view === "input" ? files.map(({ key, label }) => ({ value: key, label })) : [], context.fileKey, "file-tab");
+
+  setChoices($("#chartGroups"), [], 0, "group");
+  $("#chartFoot").hidden = true;
+  if (focused?.dataset.fileTab) {
+    $$("#fileTabs button").find((button) => button.dataset.fileTab === focused.dataset.fileTab)
+      ?.focus({ preventScroll: true });
   }
 
-  function renderDataPanel() {
-    const specs = state.algo?.files || [];
-    const tabs = $("#dataTabs");
-    tabs.innerHTML = specs
-      .map((spec) => {
-        const file = state.files[spec.key];
-        const active = spec.key === state.activeDataTab ? "active" : "";
-        return `<button class="data-tab ${active}" data-data-tab="${spec.key}" type="button">${escapeHtml(spec.label)}</button>`;
-      })
-      .join("");
-    $$("[data-data-tab]", tabs).forEach((button) => {
-      button.addEventListener("click", () => {
-        state.activeDataTab = button.dataset.dataTab;
-        renderDataPanel();
-        const entry = state.files[state.activeDataTab];
-        if (entry?.token && !entry.preview) loadPreview(state.activeDataTab);
-      });
-    });
-
-    const key = state.activeDataTab || specs[0]?.key;
-    const file = key ? state.files[key] : null;
+  if (context.view === "input") {
+    const file = context.files[context.fileKey];
     const preview = file?.preview;
-    const shell = $("#dataTableShell");
-    const meta = $("#dataMeta");
-    $("#dataCount").textContent = preview ? `${formatNumber(preview.total_rows, 0)} 行` : "—";
-    if (!file) {
-      meta.innerHTML = "";
-      shell.innerHTML = `<div class="empty-inline"><div class="empty-inline-icon">⇪</div><p>选择算法后会自动载入内置示例数据。</p></div>`;
-      return;
-    }
-    meta.innerHTML = [
-      `<span class="meta-chip"><strong>${escapeHtml(file.name)}</strong></span>`,
-      preview ? `<span class="meta-chip">${preview.kind === "shapefile" ? "空间数据" : "CSV"} · ${formatNumber(preview.total_rows, 0)} 行</span>` : "",
-      preview?.meta?.crs ? `<span class="meta-chip">CRS · ${escapeHtml(preview.meta.crs.split(":")[0] || preview.meta.crs)}</span>` : "",
-      file.isSample ? `<span class="meta-chip">内置示例</span>` : "",
-    ].join("");
-    if (file.loading) {
-      shell.innerHTML = `<div class="empty-inline"><div class="empty-inline-icon">◌</div><p>正在读取数据预览…</p></div>`;
-      return;
-    }
-    if (!preview) {
-      shell.innerHTML = `<div class="empty-inline"><div class="empty-inline-icon">⇪</div><p>这个文件还没有载入。点击左侧的上传按钮选择 ${escapeHtml(file.spec.accept)}。</p></div>`;
-      return;
-    }
-    if (!preview.rows?.length) {
-      shell.innerHTML = `<div class="empty-inline"><div class="empty-inline-icon">∅</div><p>文件没有可显示的数据行。</p></div>`;
-      return;
-    }
-    const columns = preview.columns || [];
-    const rows = preview.rows.slice(0, 100);
-    shell.innerHTML = `<table class="data-table">
-      <thead><tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map((row) => `<tr>${columns.map((_, index) => {
-        const val = row[index];
-        const numeric = typeof val === "number";
-        return `<td class="${numeric ? "num" : ""}">${escapeHtml(formatCell(val))}</td>`;
-      }).join("")}</tr>`).join("")}</tbody>
-    </table>
-    <div class="table-caption"><span>预览前 ${rows.length} 行</span><span>共 ${formatNumber(preview.total_rows, 0)} 行</span></div>`;
-  }
-
-  function setResultState(kind, text) {
-    const el = $("#resultState");
-    el.innerHTML = `<span class="status-dot ${kind}"></span><span>${escapeHtml(text)}</span>`;
-  }
-
-  function renderEmptyResult() {
-    $("#resultBody").innerHTML = `<div class="result-empty">
-      <div class="wave-orb">${ICONS.droplet}</div>
-      <h3>准备开始计算</h3>
-      <p>确认左侧参数与中间的数据，然后点击「运行计算」。结果图表、命令行输出和数据表会显示在这里。</p>
-      <div class="empty-steps"><span>配置参数</span><span>检查数据</span><span>运行</span></div>
-    </div>`;
-  }
-
-  function renderRunning() {
-    setResultState("busy", "计算中");
-    $("#resultBody").innerHTML = `<div class="running-box">
-      <div class="running-waves"></div>
-      <h3>正在运行 ${escapeHtml(state.algo?.name || "算法")}</h3>
-      <p>本地 Python 引擎正在处理数据，请稍候…</p>
-    </div>`;
-  }
-
-  function renderResult() {
-    if (!state.result) {
-      renderEmptyResult();
-      return;
-    }
-    const result = state.result;
-    const duration = Number(result.duration || 0);
-    const ok = result.ok !== false;
-    const head = `<div class="result-head">
-      <div class="result-head-title"><span class="check">${ok ? "✓" : "!"}</span>${escapeHtml(state.algo?.name || "运行结果")}</div>
-      <div class="result-head-meta">${ok ? `完成 · ${duration.toFixed(2)} s` : "运行失败"}</div>
-    </div>`;
-
-    if (!ok) {
-      setResultState("error", "运行失败");
+    $("#chartTitle").textContent = file?.spec.label || "输入数据";
+    $("#chartMeta").textContent = preview
+      ? `${file.sample ? "内置示例" : "已上传文件"} · ${count(preview.total_rows)} ${preview.kind === "shapefile" ? "个要素" : "条记录"}`
+      : file?.name || "";
+    const groups = getInputGroup(context);
+    const index = Math.min(context.inputGroup, Math.max(0, groups.length - 1));
+    setChoices($("#chartGroups"), groups.map((group, i) => ({ value: i, label: group.label })), index, "group");
+    if (groups[index]) {
+      unmountPlot = mountChart($("#chartMount"), groups[index].chart);
+    } else if (preview?.kind === "shapefile") {
+      emptyChart("空间数据已就绪", "运行计算后查看流域边界、站点与泰森多边形。");
+    } else if (preview) {
+      emptyChart("暂无可绘制的数值序列", "展开下方数据预览查看文件内容。");
+    } else if (file?.loading) {
+      emptyChart("正在读取输入数据", file.name, true);
+    } else if (file?.error) {
+      emptyChart("预览读取失败", file.error);
     } else {
-      setResultState("success", `完成 · ${duration.toFixed(2)}s`);
+      emptyChart("请选择输入文件", file?.spec.help || "上传数据后可在这里查看预览。");
     }
-
-    const summary = (result.summary || []).length
-      ? `<div class="summary-grid">${result.summary.map((item) => `<div class="summary-card">
-          <div class="summary-label">${escapeHtml(item.label)}</div>
-          <div class="summary-value">${escapeHtml(formatCell(item.value))}<span class="summary-unit">${escapeHtml(item.unit || "")}</span></div>
-        </div>`).join("")}</div>`
-      : "";
-
-    const error = result.error ? `<div class="result-error"><strong>运行错误：</strong>${escapeHtml(result.error)}</div>` : "";
-
-    const images = (result.images || []).length
-      ? `<div class="result-section"><div class="result-section-title"><span><span class="dot">●</span>结果图表</span><span>${result.images.length} 张</span></div>
-        <div class="image-grid">${result.images.map((image, index) => `<figure class="result-image" data-image-index="${index}">
-          <img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.title)}" loading="lazy">
-          <figcaption>${escapeHtml(image.title)}</figcaption>
-        </figure>`).join("")}</div></div>`
-      : `<div class="result-section"><div class="result-section-title"><span><span class="dot">●</span>结果图表</span></div><div class="empty-inline" style="min-height:120px"><p>本次算法没有返回图片结果。</p></div></div>`;
-
-    const consoleHtml = `<div class="result-section"><div class="result-section-title"><span>${ICONS.terminal} 命令行输出</span><span>${(result.stdout || "").split("\n").length} 行</span></div>
-      <div class="terminal"><div class="terminal-bar"><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-dot"></span><span class="terminal-title">hydrolab · ${escapeHtml(state.algo?.id || "run")}</span></div>
-      <pre>${colorizeLog(result.stdout || "")}</pre></div></div>`;
-
-    const tables = (result.tables || []).length
-      ? `<div class="result-section"><div class="result-section-title"><span><span class="dot">●</span>数据表</span><span>${result.tables.length} 个</span></div>
-        <div class="result-tabs">${result.tables.map((table, index) => `<button class="result-tab ${index === state.resultTableIndex ? "active" : ""}" data-result-table="${index}">${escapeHtml(table.title)}</button>`).join("")}</div>
-        <div id="resultTableHost"></div></div>`
-      : "";
-
-    $("#resultBody").innerHTML = `${head}${error}${summary}${images}${consoleHtml}${tables}`;
-    bindResultEvents();
-    if (tables) renderResultTable(state.resultTableIndex);
-  }
-
-  function colorizeLog(text) {
-    return escapeHtml(text)
-      .split("\n")
-      .map((line) => {
-        let cls = "";
-        if (line.includes("✓")) cls = "l-ok";
-        else if (line.includes("▍")) cls = "l-section";
-        else if (line.includes("警告") || line.includes("提示")) cls = "l-warn";
-        else if (line.includes("✖") || line.includes("失败")) cls = "l-err";
-        return `<span class="${cls}">${line || " "}</span>`;
-      })
-      .join("\n");
-  }
-
-  function bindResultEvents() {
-    $$("[data-image-index]").forEach((figure) => {
-      figure.addEventListener("click", () => {
-        const image = state.result.images[Number(figure.dataset.imageIndex)];
-        if (!image) return;
-        $("#lightboxImage").src = image.url;
-        $("#lightboxImage").alt = image.title;
-        $("#lightboxCaption").textContent = image.title;
-        $("#lightbox").hidden = false;
-      });
-    });
-    $$("[data-result-table]").forEach((button) => {
-      button.addEventListener("click", () => {
-        state.resultTableIndex = Number(button.dataset.resultTable);
-        $$("[data-result-table]").forEach((tab) => tab.classList.remove("active"));
-        button.classList.add("active");
-        renderResultTable(state.resultTableIndex);
-      });
-    });
-  }
-
-  function renderResultTable(index) {
-    const table = state.result?.tables?.[index];
-    const host = $("#resultTableHost");
-    if (!table || !host) return;
-    const columns = table.columns || [];
-    const rows = table.rows || [];
-    const download = table.csv_url
-      ? `<a class="table-download" href="${escapeHtml(table.csv_url)}" download>${ICONS.download} CSV</a>`
-      : "";
-    host.innerHTML = `${download ? `<div style="display:flex;justify-content:flex-end;margin-bottom:5px">${download}</div>` : ""}
-      <div class="result-table-shell"><table class="data-table">
-      <thead><tr>${columns.map((col) => `<th>${escapeHtml(col)}</th>`).join("")}</tr></thead>
-      <tbody>${rows.map((row) => `<tr>${columns.map((_, cellIndex) => {
-        const val = row[cellIndex];
-        const numeric = typeof val === "number";
-        return `<td class="${numeric ? "num" : ""}">${escapeHtml(formatCell(val))}</td>`;
-      }).join("")}</tr>`).join("")}</tbody>
-    </table></div>
-    <div class="table-caption"><span>预览 ${rows.length} 行</span><span>共 ${formatNumber(table.total_rows, 0)} 行</span></div>`;
-  }
-
-  function collectParams() {
-    const params = {};
-    $$("[data-param-key]").forEach((input) => {
-      const key = input.dataset.paramKey;
-      if (input.type === "number") {
-        const value = Number(input.value);
-        params[key] = Number.isFinite(value) ? value : input.value;
-      } else {
-        params[key] = input.value;
-      }
-    });
-    return params;
-  }
-
-  function collectFiles() {
-    const files = {};
-    (state.algo?.files || []).forEach((spec) => {
-      const entry = state.files[spec.key];
-      if (entry?.token) files[spec.key] = entry.token;
-    });
-    return files;
-  }
-
-  async function runAlgorithm() {
-    if (state.running || !state.algo) return;
-    const missing = (state.algo.files || []).filter((spec) => spec.required && !state.files[spec.key]?.token);
-    if (missing.length) {
-      toast("还缺少数据文件", missing.map((spec) => spec.label).join("、"), "error");
-      return;
+    if (preview) {
+      const truncated = preview.rows.length < preview.total_rows;
+      const caption = preview.kind === "shapefile"
+        ? [preview.meta?.geometry_type, preview.meta?.crs].filter(Boolean).join(" · ")
+        : truncated ? `曲线使用预览的前 ${preview.rows.length} 行，计算使用完整文件` : file.name;
+      $("#chartFoot").hidden = false;
+      $("#chartFoot").innerHTML = `<div class="chart-footer-note">${escapeHtml(caption)}</div>
+        <details><summary>查看输入记录</summary>${compactTable(preview)}</details>`;
     }
-    state.running = true;
-    const button = $("#runButton");
-    button.classList.add("running");
-    button.disabled = true;
-    renderRunning();
-    const started = performance.now();
+    return;
+  }
+
+  $("#chartTitle").textContent = context.view === "original" ? "原始计算图" : "计算结果";
+  $("#chartMeta").textContent = result?.ok ? `Python 计算完成 · ${result.duration.toFixed(2)} s` : "";
+  if (activeRun === context) {
+    emptyChart("正在计算", "本地 Python 引擎正在处理当前算例。", true);
+    return;
+  }
+  if (!result?.ok) {
+    emptyChart(result ? "本次计算未完成" : "等待运行", result?.error || "运行后在此查看过程线、关键指标和完整结果。");
+    return;
+  }
+  if (context.view === "original" || (!result.groups.length && result.images?.length)) {
+    if (context.view === "output") $("#chartTitle").textContent = result.images[0].title;
+    showOriginal(result.images);
+    return;
+  }
+
+  const group = result.groups[context.outputGroup];
+  if (!group) {
+    emptyChart("结果已生成", "在下方查看计算指标和逐行输出。");
+    return;
+  }
+  $("#chartTitle").textContent = group.label;
+  setChoices($("#chartGroups"), result.groups.map((item, index) => ({ value: index, label: item.label })), context.outputGroup, "group");
+  unmountPlot = mountChart($("#chartMount"), group.chart);
+  const { table } = group;
+  $("#chartFoot").hidden = false;
+  const points = table.rows.length < table.total_rows
+    ? `曲线显示前 ${count(table.rows.length)} / ${count(table.total_rows)} 行`
+    : `${count(table.total_rows)} 条计算记录`;
+  const note = group.useRowIndex ? " · 按记录顺序，精确时间见原始图" : "";
+  $("#chartFoot").innerHTML = `<div class="chart-footer-note">${points}${note}</div>
+    ${table.csv_url ? `<a class="download-link" href="${escapeHtml(table.csv_url)}" download>${icon("download")} 下载 CSV</a>` : ""}`;
+}
+
+function revealMobileChart() {
+  if (!window.matchMedia("(max-width: 630px)").matches) return;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  $(".chart-panel").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+}
+
+function renderDetails() {
+  const result = workspace.result;
+  const host = $("#outputDetails");
+  host.hidden = !result;
+  if (!result) {
+    host.replaceChildren();
+    return;
+  }
+  const summary = (result.summary || []).map((item) =>
+    `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(valueText(item.value))}<span>${escapeHtml(item.unit)}</span></dd></div>`
+  ).join("");
+  const tables = (result.tables || []).map((table) =>
+    `<section><h4>${escapeHtml(table.title)}</h4>${compactTable(table)}</section>`
+  ).join("");
+  host.innerHTML = `${summary ? `<h4 class="summary-heading">关键指标</h4><dl class="summary-grid">${summary}</dl>` : ""}
+    <div class="detail-stack">
+      ${tables ? `<details><summary>结果数据与下载</summary><div class="table-stack">${tables}</div></details>` : ""}
+      ${result.stdout ? `<details ${result.ok ? "" : "open"}><summary>计算日志</summary><pre>${escapeHtml(result.stdout)}</pre></details>` : ""}
+    </div>`;
+}
+
+function markEdited() {
+  if (workspace.result || activeRun === workspace) workspace.changed = true;
+  updateRunState();
+}
+
+function updateRunState() {
+  const uploading = Object.values(workspace?.files || {}).some((file) => file.uploading);
+  $("#resetButton").disabled = !workspace || activeRun === workspace;
+  $("#runButton").disabled = !workspace || Boolean(activeRun) || uploading;
+  $("#runLabel").textContent = activeRun && activeRun === workspace ? "计算中…" : workspace?.result ? "重新计算" : "运行计算";
+  $("#runStatus").textContent = activeRun
+    ? (activeRun === workspace ? "正在运行当前算例" : "本地引擎正在处理上一算例")
+    : uploading ? "正在读取上传文件"
+    : workspace?.changed ? "已有修改，重新运行可更新结果"
+    : workspace?.result?.ok ? `已完成 · ${workspace.result.duration.toFixed(2)} s`
+    : workspace?.result ? "运行失败，可查看计算日志后重试"
+    : "可直接使用内置示例运行";
+}
+
+function collectParams() {
+  const params = {};
+  for (const input of $$("[data-field]")) {
+    const { badInput, rangeUnderflow, rangeOverflow } = input.validity;
+    if (badInput || rangeUnderflow || rangeOverflow) {
+      const details = input.closest("details");
+      if (details) details.open = true;
+      input.focus();
+      throw new Error(`请检查「${input.labels[0].textContent}」的输入范围`);
+    }
+    params[input.dataset.field] = input.type === "number" && input.value !== "" ? input.valueAsNumber : input.value;
+  }
+  return params;
+}
+
+async function fullChartTables(tables) {
+  return Promise.all(tables.map(async (table) => {
+    if (!table.csv_url || table.rows.length === table.total_rows) return table;
     try {
-      const data = await api("/api/run", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          algorithm: state.algo.id,
-          params: collectParams(),
-          files: collectFiles(),
-        }),
-      });
-      state.result = data;
-      state.resultTableIndex = 0;
-      renderResult();
-      if (data.ok) {
-        toast("计算完成", `${data.duration?.toFixed?.(2) ?? ""} 秒 · 结果已生成`);
-      } else {
-        toast("计算失败", data.error || "请查看命令行输出", "error");
-      }
-    } catch (error) {
-      state.result = { ok: false, error: error.message, stdout: `网络或服务器错误：${error.message}`, summary: [], tables: [], images: [] };
-      renderResult();
-      toast("连接失败", error.message, "error");
-    } finally {
-      state.running = false;
-      button.classList.remove("running");
-      button.disabled = false;
-      const elapsed = ((performance.now() - started) / 1000).toFixed(1);
-      if (state.result?.ok) {
-        setResultState("success", `完成 · ${elapsed}s`);
-      }
-    }
-  }
-
-  function bindGlobalEvents() {
-    $("#runButton").addEventListener("click", runAlgorithm);
-    document.addEventListener("keydown", (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-        event.preventDefault();
-        runAlgorithm();
-      }
-      if (event.key === "Escape" && !$("#lightbox").hidden) {
-        $("#lightbox").hidden = true;
-      }
-    });
-    $("#lightboxClose").addEventListener("click", () => ($("#lightbox").hidden = true));
-    $("#lightbox").addEventListener("click", (event) => {
-      if (event.target === $("#lightbox")) $("#lightbox").hidden = true;
-    });
-  }
-
-  async function init() {
-    bindGlobalEvents();
-    try {
-      const health = await api("/api/health");
-      if (health.ok) setStatus("", "ENGINE READY");
-      else setStatus("error", "OFFLINE");
+      const response = await fetch(table.csv_url, { signal: AbortSignal.timeout(8000) });
+      if (!response.ok) return table;
+      return parseResultCsv(await response.text(), table);
     } catch {
-      setStatus("error", "OFFLINE");
+      return table;
     }
-    try {
-      const data = await api("/api/catalog");
-      state.catalog = data;
-      state.courses = data.courses || [];
-      state.algorithms = data.algorithms || [];
-      if (!state.courses.length || !state.algorithms.length) throw new Error("目录为空");
-      state.courseId = state.courses[0].id;
-      state.algoId = null;
-      renderCourseTabs();
-      renderAlgoRail();
-      selectAlgorithm(state.algorithms.find((algo) => algo.course === state.courseId)?.id, { keepCourse: true });
-    } catch (error) {
-      setStatus("error", "ENGINE OFFLINE");
-      $("#algoRail").innerHTML = `<div class="empty-inline" style="grid-column:1/-1;min-height:100px"><p>无法读取算法目录：${escapeHtml(error.message)}</p></div>`;
-      renderEmptyResult();
-      toast("无法加载工作台", error.message, "error");
-    }
-  }
+  }));
+}
 
-  document.addEventListener("DOMContentLoaded", init);
-})();
+async function runAlgorithm() {
+  if ($("#runButton").disabled || !workspace) return;
+  const context = workspace;
+  const missing = Object.values(context.files).filter((entry) => entry.spec.required && !entry.token);
+  if (missing.length) return toast("缺少输入文件", missing.map((entry) => entry.spec.label).join("、"), true);
+  let params;
+  try {
+    params = collectParams();
+  } catch (error) {
+    return toast("参数需要调整", error.message, true);
+  }
+  const files = Object.fromEntries(Object.entries(context.files).filter(([, entry]) => entry.token)
+    .map(([key, entry]) => [key, entry.token]));
+  activeRun = context;
+  context.result = null;
+  context.changed = false;
+  context.view = "output";
+  context.outputGroup = 0;
+  updateRunState();
+  renderChart();
+  renderDetails();
+  revealMobileChart();
+
+  try {
+    const data = await api("/api/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ algorithm: context.algo.id, params, files }),
+    });
+    const chartTables = await fullChartTables(data.tables || []);
+    context.result = { ...data, groups: resultCharts(context.algo.id, chartTables, params) };
+  } catch (error) {
+    context.result = { ...error.payload, ok: false, error: error.message, groups: [] };
+    if (workspace === context) toast("运行失败", error.message, true);
+  } finally {
+    activeRun = null;
+    if (workspace === context) {
+      renderChart();
+      renderDetails();
+    }
+    updateRunState();
+  }
+}
+
+function buttonAction(target, attribute, action) {
+  const button = target.closest(`button[data-${attribute}]`);
+  if (!button) return false;
+  action(button.getAttribute(`data-${attribute}`), button);
+  return true;
+}
+
+function activateChoice(target, key, action) {
+  buttonAction(target, key, (value) => {
+    action(value);
+    $(`button[data-${key}="${value}"]`)?.focus({ preventScroll: true });
+  });
+}
+
+function bindEvents() {
+  $("#courseTabs").addEventListener("click", ({ target }) => activateChoice(target, "course", (id) => {
+    const first = catalog.algorithms.find((algo) => algo.course === id);
+    if (first && workspace.algo.course !== id) selectAlgorithm(first.id);
+  }));
+  $("#algoRail").addEventListener("click", ({ target }) => activateChoice(target, "algo", selectAlgorithm));
+  $("#viewSwitch").addEventListener("click", ({ target }) => activateChoice(target, "view", (view) => {
+    workspace.view = view;
+    renderChart();
+  }));
+  $("#fileTabs").addEventListener("click", ({ target }) => activateChoice(target, "file-tab", chooseFile));
+  $("#chartGroups").addEventListener("click", ({ target }) => activateChoice(target, "group", (value) => {
+    if (workspace.view === "input") workspace.inputGroup = Number(value);
+    else workspace.outputGroup = Number(value);
+    renderChart();
+  }));
+  $("#resetButton").addEventListener("click", () => {
+    selectAlgorithm(workspace.algo.id, true);
+    toast("已恢复内置示例与默认参数");
+  });
+  $("#runForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    runAlgorithm();
+  });
+  $("#runForm").addEventListener("input", ({ target }) => {
+    if (!target.matches("[data-field]")) return;
+    markEdited();
+    if (target.matches("[data-column]") && workspace.view === "input") {
+      workspace.inputGroup = 0;
+      renderChart();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (!event.repeat && event.key === "Enter" && (event.ctrlKey || event.metaKey) && !$("#lightbox").open) {
+      event.preventDefault();
+      runAlgorithm();
+    }
+    if (event.key === "Escape" && $("#lightbox").open) event.stopPropagation();
+  });
+  window.addEventListener("hashchange", () => {
+    if (catalog) selectAlgorithm(location.hash.slice(1));
+  });
+
+  const list = $("#fileList");
+  list.addEventListener("click", ({ target }) => {
+    if (buttonAction(target, "preview-file", (key) => {
+      chooseFile(key);
+      revealMobileChart();
+    })) return;
+    if (buttonAction(target, "upload", (key) => $(`[data-file-input="${key}"]`, list).click())) return;
+    buttonAction(target, "clear", (key) => {
+      const entry = workspace.files[key];
+      if (entry.uploading) return;
+      Object.assign(entry, { token: null, name: "", sample: false, preview: null, error: "" });
+      renderFiles();
+      markEdited();
+      if (workspace.view === "input") renderChart();
+    });
+  });
+  list.addEventListener("change", ({ target }) => {
+    const file = target.files?.[0];
+    if (file) uploadFile(target.dataset.fileInput, file);
+    target.value = "";
+  });
+  list.addEventListener("dragover", (event) => {
+    const card = event.target.closest("[data-drop]");
+    if (!card || !event.dataTransfer.types.includes("Files")) return;
+    event.preventDefault();
+    card.classList.add("dragover");
+  });
+  list.addEventListener("dragleave", ({ target, relatedTarget }) => {
+    const card = target.closest("[data-drop]");
+    if (card && !card.contains(relatedTarget)) card.classList.remove("dragover");
+  });
+  list.addEventListener("drop", (event) => {
+    const card = event.target.closest("[data-drop]");
+    if (!card) return;
+    event.preventDefault();
+    card.classList.remove("dragover");
+    const file = event.dataTransfer.files[0];
+    if (file) uploadFile(card.dataset.drop, file);
+  });
+  $("#chartMount").addEventListener("click", ({ target }) => buttonAction(target, "figure", (index, button) => {
+    const image = workspace.result?.images?.[index];
+    if (!image) return;
+    lightboxTrigger = button;
+    $("#lightboxImage").src = image.url;
+    $("#lightboxImage").alt = image.title;
+    $("#lightboxCaption").textContent = image.title;
+    $("#lightbox").showModal();
+  }));
+  $("#lightboxClose").addEventListener("click", () => $("#lightbox").close());
+  $("#lightbox").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
+  $("#lightbox").addEventListener("close", () => lightboxTrigger?.focus());
+}
+
+async function init() {
+  bindEvents();
+  $("#runIcon").innerHTML = icon("play");
+  drawTerrain($("#terrain"));
+  api("/api/health").then((health) => setEngine(health.ok, health.ok ? "本地引擎在线" : "本地引擎离线"))
+    .catch(() => setEngine(false, "本地引擎离线"));
+  try {
+    catalog = await api("/api/catalog");
+    const initial = catalog.algorithms.find((algo) => algo.id === location.hash.slice(1)) || catalog.algorithms[0];
+    if (!initial) throw new Error("算法目录为空");
+    $("#catalogMetrics").innerHTML = `<div><strong>${catalog.courses.length}</strong><span>门课程</span></div>
+      <div><strong>${catalog.algorithms.length}</strong><span>项算法</span></div>`;
+    $("#catalogMetrics").hidden = false;
+    selectAlgorithm(initial.id);
+  } catch (error) {
+    $("#algoTitle").textContent = "无法加载算法目录";
+    $("#algoDescription").textContent = error.message;
+    $("#runStatus").textContent = "请确认本地服务已启动，再刷新页面";
+    emptyChart("工作台连接失败", "检查本地 Python 服务是否正在运行。");
+  }
+}
+
+init();

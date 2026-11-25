@@ -102,6 +102,7 @@ def run_nash_nk(ctx, params, files):
         ]
     )
     ctx.save_csv(moments, "Nash参数计算结果.csv", title="矩法计算结果")
+    ctx.add_visual_table("rain_response", ["时间 (h)", "净雨量", "出口流量"], df["Time"], r, q)
 
     fig, ax1 = plt.subplots(figsize=(8.8, 5))
     ax1.plot(df["Time"], df["R"], "o-", color=CYAN, linewidth=1.8, markersize=4, label="净雨 R")
@@ -179,12 +180,14 @@ def run_nash_duh(ctx, params, files):
     ax.bar(time_points, duh, width=dt * 0.78, color=CYAN, alpha=0.22, edgecolor=CYAN, linewidth=0.8, label="时段单位线柱")
     ax.plot(time_points, duh, "o-", color=CYAN, linewidth=1.8, markersize=4, label="时段单位线")
     ax.scatter([peak_time], [peak], s=80, color=ORANGE, zorder=5)
-    ax.annotate(f"峰 {peak:.1f} m³/s", (peak_time, peak), xytext=(10, 14), textcoords="offset points", color=ORANGE)
+    ax.annotate(f"峰 {peak:.1f} m³/s", (peak_time, peak), xytext=(12, -22), textcoords="offset points", color=ORANGE)
     if std_time is not None and std_flow is not None:
         ax.plot(std_time, std_flow, "^-", color=ORANGE, linewidth=1.6, markersize=5, alpha=0.85, label="标准曲线")
         if rmse is not None:
             ax.text(0.98, 0.78, f"RMSE = {rmse:.2f} m³/s", transform=ax.transAxes, ha="right", color=ORANGE)
     ax.set_title(f"Nash 时段单位线（N={n_value:g}, K={k_value:g} h, Δt={dt:g} h）")
+    if std_time is not None and std_flow is not None:
+        ctx.add_visual_table("reference", ["时间 (h)", "标准流量"], std_time, std_flow)
     ax.set_xlabel("时间 / h")
     ax.set_ylabel("流量 / m³/s")
     ax.legend(loc="upper right")
@@ -243,6 +246,7 @@ def run_sherman_derive(ctx, params, files):
 
     table = pd.DataFrame({"时段": np.arange(1, len(un) + 1), "单位线纵坐标(m³/s)": np.round(un, 4)})
     ctx.save_csv(table, "Sherman单位线推求结果.csv", title="Sherman 单位线")
+    ctx.add_visual_table("runoff", ["时段", "地面径流"], table["时段"], rs)
 
     fig, ax = plt.subplots(figsize=(8.8, 5))
     ax.plot(table["时段"], un, "o-", color=CYAN, linewidth=2, markersize=5, label="单位线纵坐标")
@@ -299,6 +303,9 @@ def run_sherman_outlet(ctx, params, files):
     if comparison is not None and len(comparison) >= len(q_value):
         table["实际流量(m³/s)"] = comparison[: len(q_value)]
     ctx.save_csv(table, "Sherman出口流量结果.csv", title="出口流量过程")
+    ctx.add_visual_table("rain_response", ["时间(时段)", "净雨量"], np.arange(len(rain)), rain)
+    if comparison is not None and len(comparison):
+        ctx.add_visual_table("reference", ["时间(时段)", "实测流量"], np.arange(len(comparison)), comparison)
 
     fig, axes = plt.subplots(3, 1, figsize=(8.8, 10), sharex=False)
     ax = axes[0]

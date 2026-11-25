@@ -1,211 +1,67 @@
-# Agent.md · HydroLab / 水文计算工作台开发与部署指南
+# HydroLab 维护指南
 
-本文件面向 AI Agent 或后续维护者，说明项目结构、启动方式、接口约定、新增算法的方法和验收流程。
+[中文 README](README.md) · [English README](README.en.md) · [本地启动提示词](一键启动部署提示词.md)
 
-## 1. 项目定位
+## 工作台边界
 
-`水利水文计算` 是一个高校水利水电工程课程实验代码仓库：
+HydroLab 包含 3 门课程和 14 项算法。课程目录保存原始脚本，`workbench/` 的 Python 运行器提供每项算法的本地 Web 入口。界面维护应保留公式、单位、参数默认值、文件要求、API 以及既有 CSV 的含义。
 
-- `工程水文课程-代码开发/`
-- `水利信息化课程-代码开发/`
-- `防洪概论课程-代码开发/`
+## 启动
 
-原有 Python 脚本可以直接命令行运行，但大多包含开发机绝对路径、硬编码数据或需要手工改参数。`workbench/` 在这些算法之上提供了一个**本地 Web 操作台**：
+Windows 执行 `.\start_workbench.bat`，macOS / Linux 执行 `bash start_workbench.sh`。已有虚拟环境时，可显式安装依赖并启动。
 
-- 按课程 / 算法分类浏览；
-- 三栏布局：参数配置 → 原始数据 → 运行结果；
-- 上传 CSV / Shapefile zip，填参数，一键运行；
-- 右侧展示命令行日志、结果图片、结果表格和 CSV 下载；
-- 所有计算在本机 Python 进程中完成，不上传云端。
-
-## 2. 快速启动
-
-### Windows
-
-```powershell
-cd <repo>
-.\start_workbench.bat
-```
-
-或：
-
-```powershell
+```bash
 python -m pip install -r requirements.txt
-python workbench\start.py
-```
-
-### macOS / Linux
-
-```bash
-cd <repo>
-./start_workbench.sh
-```
-
-默认地址：`http://127.0.0.1:8765`
-
-可选参数：
-
-```powershell
-python workbench/start.py --port 8766
 python workbench/start.py --no-browser
 ```
 
-## 3. 目录结构
+默认监听 `127.0.0.1:8765`。如需换端口，增加 `--port 8766`。GeoPandas 和 Shapely 用于泰森多边形，中文图例依赖本机可用的 CJK 字体。
 
-```text
-workbench/
-├── app.py                 # Flask 应用和 API
-├── start.py               # 一键启动入口
-├── catalog.py             # 课程、算法、字段、默认示例文件目录
-├── common.py              # 数据读取、Matplotlib 主题、运行上下文
-├── engineering.py         # 工程水文算法
-├── muskingum.py           # 马斯京根算法
-├── unit_hydrograph.py     # Nash / Sherman 单位线
-├── flood.py               # 曲线插值与水库调洪
-├── thiessen.py            # 泰森多边形
-├── samples/               # 内置示例 CSV / Shapefile zip
-├── static/
-│   ├── index.html         # 单页工作台
-│   ├── styles.css         # 深色玻璃 UI
-│   └── app.js             # 前端状态与交互
-└── runtime/               # 运行生成物（已 gitignore）
-    ├── uploads/
-    ├── runs/
-    └── shp/
-```
+## 维护入口
 
-## 4. API
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| GET | `/api/health` | 健康检查 |
-| GET | `/api/catalog` | 课程、算法、表单字段、默认文件 |
-| GET | `/api/preview?token=...` | CSV / Shapefile zip 预览 |
-| POST | `/api/upload` | `multipart/form-data`，字段 `file`、`role` |
-| POST | `/api/run` | JSON：`{algorithm, params, files}` |
-| GET | `/runtime/runs/<id>/<file>` | 下载/查看结果文件 |
-
-`files` 的值是文件 token：
-
-- `sample:<name>`：`workbench/samples/` 下的内置示例；
-- `upload:<id>`：本次进程内上传的文件（重启后失效）。
-
-`/api/run` 返回：
-
-```json
-{
-  "ok": true,
-  "duration": 0.42,
-  "stdout": "命令行日志",
-  "summary": [{"label": "最大流量", "value": 2363, "unit": "m³/s"}],
-  "tables": [{"title": "结果表", "columns": [], "rows": [], "csv_url": "/runtime/..."}],
-  "images": [{"title": "过程线", "url": "/runtime/..."}]
-}
-```
-
-## 5. 算法覆盖
-
-当前 14 个算法：
-
-### 工程水文学
-
-- 等间隔线性插值
-- 多种插值对比
-- 时段最大洪量
-- 曲线面积积分校验
-
-### 水利信息化
-
-- 泰森多边形面雨量
-- 马斯京根参数率定 X/K
-- 马斯京根下游流量演算
-- Nash 瞬时单位线 N/K
-- Nash 时段单位线
-- Sherman 单位线推求
-- Sherman 出口流量
-
-### 防洪概论
-
-- 水库曲线插值（Z-V / Z-q / 通用）
-- 调洪演算 · 试算法
-- 调洪演算 · RK4
-
-## 6. 新增算法
-
-1. 在 `workbench/` 下新增模块或复用现有模块，实现：
-
-```python
-def run_my_algorithm(ctx, params, files):
-    # ctx.log("...")
-    # df = read_csv(files["input_csv"])
-    # ctx.save_csv(df, "结果.csv", title="结果")
-    # ctx.save_fig(fig, "结果图.png", title="结果图")
-    return {"summary": ctx.summary, "tables": ctx.tables, "images": ctx.images}
-```
-
-2. 在 `catalog.py` 的 `ALGORITHMS` 中增加条目：
-   - `id`、`course`、`name`、`short`、`description`；
-   - `fields`：`number` / `select` / `text` / `textarea` / `column`；
-   - `files`：`key`、`label`、`accept`、`required`、`sample`；
-   - 可以标注 `advanced: true` 将字段折叠到高级参数。
-
-3. 在 `app.py` 的 `RUNNERS` 字典注册 `id` → 函数。
-
-4. 把内置示例数据放入 `workbench/samples/`，并设置 `sample` 字段。
-
-5. 运行 `python workbench/start.py --no-browser`，用浏览器点选新算法运行一次。
-
-## 7. 数据格式约定
-
-- CSV 支持 UTF-8 / UTF-8 BOM / GBK / GB18030 / latin1；
-- 洪水过程支持：
-  - `年月日` + `时` + `Q`；
-  - `年` + `月` + `日` + `时` + `Q`；
-  - `时间t/h` + `Q/(m3/s-1)`；
-  - 通用时间列 + 流量列。
-- 泰森多边形上传 zip，zip 内需包含完整 `.shp/.dbf/.shx/.prj`。
-- 水库调洪三份 CSV：入库流量、水位-库容、水位-下泄流量。
-
-## 8. 视觉与绘图约定
-
-- 前端：深色玻璃 + 青色/紫色/橙色高亮，三栏布局；
-- Matplotlib：统一使用 `common.configure_matplotlib()`，深色背景、主题色和微软雅黑；
-- 图片保存到 `ctx.run_dir`，通过 `ctx.save_fig()` 自动登记；
-- 不要使用 `plt.show()`；始终 `Agg` 后端。
-
-## 9. 验收清单
-
-```bash
-python -c "from workbench.app import create_app; create_app(); print('ok')"
-python workbench/start.py --no-browser
-```
-
-打开 `http://127.0.0.1:8765/`，确认：
-
-- [ ] 顶部三个课程可切换；
-- [ ] 每个课程的算法卡片可点击；
-- [ ] 三栏布局完整：参数 / 原始数据 / 运行结果；
-- [ ] 默认示例数据能预览；
-- [ ] 至少运行一个工程水文、一个水利信息化、一个防洪算法；
-- [ ] 结果区同时出现命令行日志、图片、数据表；
-- [ ] 图片可以点击放大；
-- [ ] 刷新页面后一切正常。
-
-## 10. 常见问题
-
-| 问题 | 处理 |
+| 文件 | 职责 |
 | --- | --- |
-| `ModuleNotFoundError: flask` | `python -m pip install -r requirements.txt` |
-| `geopandas` 导入失败 | 安装 `geopandas` / `shapely`，Windows 推荐 conda-forge 或 pip 新版 |
-| 端口被占用 | `python workbench/start.py --port 8766` |
-| 中文图片方块 | 安装微软雅黑/SimHei，或替换 `common.py` 中字体候选 |
-| 上传 zip 预览失败 | 确认 zip 内包含 `.shp/.dbf/.shx/.prj`，不要把 `.shp` 单独上传 |
-| 运行后无图片 | 查看命令行输出，可能是数据缺少列或 Matplotlib 绘图异常 |
-| 浏览器打开空白 | 确认 Flask 服务仍在运行，访问 `/api/health` |
+| `workbench/static/index.html` | 文档结构、课程导航、工作区、配置表单和原图查看对话框 |
+| `workbench/static/styles.css` | 布局、响应式样式、交互状态和减少动效偏好 |
+| `workbench/static/app.js` | 加载目录、算例状态、上传预览、请求运行、收起和展开结果明细 |
+| `workbench/static/charts.js` | 将真实输入和输出表映射到 Canvas，处理独立量纲、图例及数据点检查 |
+| `workbench/catalog.py` | 课程、算法、参数字段、默认值、示例文件 |
+| `workbench/app.py` | Flask API、文件标识、并发控制和算法路由 |
+| `workbench/common.py` | 数据读取、预览、运行上下文与文件输出 |
+| `engineering.py`、`muskingum.py`、`unit_hydrograph.py`、`flood.py`、`thiessen.py` | 各课程 Python 运行器 |
 
-## 11. 约束
+上传与运行产物由应用写到 `workbench/runtime/`，该目录已忽略。当前后端在启动时会清理所属子目录中超过 48 小时的运行数据。需要长期保留的输出应下载到工作台目录之外。维护和验证可使用独立临时运行目录，保留用户已有的文件。
 
-- 不修改用户原有课程脚本的算法含义；
-- 不把运行结果、用户上传文件提交到 Git；
-- 工作台只监听 `127.0.0.1`，不要暴露到公网；
-- 新增算法必须提供默认示例，保证用户点开即可运行。
+## API 与前端数据流
+
+| 请求 | 用途 |
+| --- | --- |
+| `GET /api/health` | 查询服务状态 |
+| `GET /api/catalog` | 读取 `courses` 和 `algorithms` |
+| `GET /api/preview?token=…` | 读取 CSV 的列和预览行，或 Shapefile 的属性、几何类型和 CRS |
+| `POST /api/upload` | 用 `multipart/form-data` 提交 `file` 与 `role` |
+| `POST /api/run` | 传入 `{"algorithm": "...", "params": {...}, "files": {...}}` |
+| `GET /runtime/runs/<id>/<file>` | 读取本次计算生成的 CSV 或图片 |
+
+`files` 以配置清单中的文件键为键。值为 `sample:<name>` 或 `upload:<id>`，其中上传标识只在当前服务进程有效。运行返回 `ok`、`duration`、`stdout`、`summary`、`tables` 和 `images`，失败时可能包含 `error` 与部分产物。
+
+输入预览最多由 API 返回 100 行，表格在界面中显示前六行。结果数据由 `RunContext.save_csv()` 导出，曲线在预览截断时尝试读取同一结果的完整 CSV。读取失败时显示当前预览的范围，CSV 下载入口仍指向原始输出。
+
+## 添加算法或结果视图
+
+1. 扩展 `catalog.py` 和 `app.py` 的 `RUNNERS`，为字段设置可复现的默认值，并在 `workbench/samples/` 提供匹配的文件。
+2. 在 Python 运行器内通过 `ctx.add_summary()`、`ctx.save_csv()`、`ctx.save_fig()` 和 `ctx.log()` 登记产物。绘图沿用现有无界面的 Matplotlib 后端。
+3. 若结果表需要交互图，在 `charts.js` 的 `resultCharts()` 中明确横轴、列名和单位。不同量纲分开绘制，以原图保留空间分析与多面板图。
+4. 同步更新中英文 README 的算法列表和实际展示素材。当前展示文件位于 `docs/portfolio/`。
+
+## 验收
+
+- 请求 `/api/health` 和 `/api/catalog`，检查课程、算法和样例是否加载。
+- 对目录中的 14 项算法逐项运行默认输入，核对 HTTP 状态、摘要、CSV 和图片。只改界面时，可对照改动前的摘要、结果表及 CSV 内容。
+- 测试至少一例多曲线、一例三文件调洪、一例泰森地图。检查输入切换、图例、悬停或键盘数据点、原图放大、日志展开和完整 CSV 下载。
+- 替换一个 CSV 后验证重新预览，恢复示例后核对默认输入和参数。验证运行中切换算法时，响应回到对应算例。
+- 使用桌面和窄屏浏览器查看布局，确认表格有界、页面无横向溢出，检查控制台报错及 README 媒体链接。
+
+## 数据格式
+
+洪水过程常用 `年月日,时,Q` 或 `年,月,日,时,Q`，具体列以算法对应的示例为准。水库调洪使用入库过程、水位–库容、水位–下泄三份 CSV。泰森多边形的两个 ZIP 应包含 `.shp`、`.dbf`、`.shx`、`.prj` 配套文件，雨量站属性应包含配置中的站名和雨量字段。

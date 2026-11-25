@@ -151,6 +151,14 @@ def run_thiessen(ctx, params, files):
     ctx.add_summary("站点数量", len(table), "个")
     ctx.add_summary("控制面积", f"{total_area / 1e6:,.2f}", "km²")
     ctx.save_csv(table, "泰森多边形权重.csv", title="站点权重")
+    ctx.visuals["station_areas"] = {
+        "crs": str(basin_proj.crs),
+        "boundary": boundary.__geo_interface__,
+        "zones": [
+            {"geometry": cell.__geo_interface__, "point": [float(point.x), float(point.y)]}
+            for cell, point in zip(voronoi.geometry, filtered.geometry)
+        ],
+    }
 
     fig, ax = plt.subplots(figsize=(8.8, 7.4))
     voronoi.plot(ax=ax, facecolor="#0e2a3a", edgecolor=CYAN, alpha=0.55, linewidth=0.9)
