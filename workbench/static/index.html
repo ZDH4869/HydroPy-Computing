@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>HydroLab · 水文计算工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C8 8 5 12 5 15a7 7 0 0 0 14 0c0-3-3-7-7-13Z' fill='%2322d3ee'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="ambient ambient-c"></div>
+  <div class="grid-glow"></div>
+
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" fill="none">
+            <path d="M24 5C18 14 10 22 10 30.5C10 38.1 16.3 44 24 44C31.7 44 38 38.1 38 30.5C38 22 30 14 24 5Z" stroke="currentColor" stroke-width="2.2"/>
+            <path d="M15 31.5C18.5 27.5 21.2 27.5 24 31.5C26.8 35.5 29.5 35.5 33 31.5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="brand-copy">
+          <div class="brand-name">HydroLab<span class="brand-dot">.</span></div>
+          <div class="brand-sub">水文计算工作台 · COURSE WORKBENCH</div>
+        </div>
+      </div>
+
+      <nav class="course-tabs" id="courseTabs" aria-label="课程模块"></nav>
+
+      <div class="topbar-meta">
+        <div class="engine-status" id="engineStatus">
+          <span class="status-dot"></span>
+          <span class="status-label">连接引擎中</span>
+        </div>
+        <a class="ghost-link" href="/api/catalog" target="_blank" rel="noreferrer">API</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="rail-section">
+        <div class="section-heading">
+          <div>
+            <div class="eyebrow">ALGORITHM LIBRARY</div>
+            <h1>选择一个水文算法</h1>
+          </div>
+          <div class="rail-meta">
+            <span id="algoCount">—</span>
+            <span class="rail-meta-sep">/</span>
+            <span id="courseLabel">—</span>
+          </div>
+        </div>
+        <div class="algo-rail" id="algoRail"></div>
+      </section>
+
+      <section class="workbench" id="workbench">
+        <aside class="panel panel-params">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">01 · CONFIGURE</div>
+              <h2 id="paramTitle">参数配置</h2>
+            </div>
+            <span class="panel-icon" id="paramIcon"></span>
+          </div>
+          <div class="algo-intro" id="algoIntro"></div>
+
+          <div class="panel-scroll">
+            <div class="block">
+              <div class="block-title"><span>数据文件</span><span class="muted" id="fileHint">可上传 CSV / Shapefile zip</span></div>
+              <div class="file-list" id="fileList"></div>
+            </div>
+
+            <div class="block">
+              <div class="block-title"><span>初始参数</span><span class="muted">已填入代码默认值</span></div>
+              <div class="field-grid" id="paramFields"></div>
+              <details class="advanced" id="advancedBox">
+                <summary>高级参数 <span class="muted">一般无需修改</span></summary>
+                <div class="field-grid advanced-grid" id="advancedFields"></div>
+              </details>
+            </div>
+
+            <div class="execution-card">
+              <span class="exec-icon" id="execIcon"></span>
+              <span class="exec-copy">
+                <strong>本地 Python 引擎</strong>
+                <small id="execScript">原始脚本加载中…</small>
+              </span>
+              <span class="exec-badge">READY</span>
+            </div>
+          </div>
+
+          <div class="run-zone">
+            <div class="run-meta">
+              <span class="run-hint" id="runHint">本地执行 · 数据不出本机</span>
+              <span class="run-kbd">Ctrl ↵</span>
+            </div>
+            <button class="run-button" id="runButton">
+              <span class="run-button-icon">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M8 5.5L18.5 12L8 18.5V5.5Z" fill="currentColor"/></svg>
+              </span>
+              <span class="run-button-copy">
+                <strong>运行计算</strong>
+                <small>Run algorithm</small>
+              </span>
+              <span class="run-button-shimmer"></span>
+            </button>
+          </div>
+        </aside>
+
+        <section class="panel panel-data">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">02 · RAW DATA</div>
+              <h2>原始数据</h2>
+            </div>
+            <span class="data-count" id="dataCount">—</span>
+          </div>
+          <div class="data-tabs" id="dataTabs"></div>
+          <div class="data-meta" id="dataMeta"></div>
+          <div class="table-shell" id="dataTableShell">
+            <div class="empty-inline">
+              <div class="empty-inline-icon">⇪</div>
+              <p>选择算法后会自动载入内置示例数据。</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel-results" id="resultPanel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-kicker">03 · OUTPUT</div>
+              <h2>运行结果</h2>
+            </div>
+            <div class="result-state" id="resultState"><span class="status-dot idle"></span><span>等待运行</span></div>
+          </div>
+          <div class="panel-scroll result-scroll" id="resultBody"></div>
+        </section>
+      </section>
+
+      <footer class="footer">
+        <span>HydroLab · 四川农业大学 水利水电工程课程计算工具集</span>
+        <span class="footer-sep"></span>
+        <span>Python · Flask · NumPy · SciPy · GeoPandas</span>
+        <span class="footer-sep"></span>
+        <span>本地优先 · 数据不出本机</span>
+      </footer>
+    </main>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+  <div class="lightbox" id="lightbox" hidden>
+    <button class="lightbox-close" id="lightboxClose" aria-label="关闭">✕</button>
+    <figure class="lightbox-figure">
+      <img id="lightboxImage" alt="">
+      <figcaption id="lightboxCaption"></figcaption>
+    </figure>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

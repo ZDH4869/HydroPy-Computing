@@ -14,6 +14,100 @@
 | [水利信息化课程-代码开发](#二水利信息化课程-代码开发) | 水利信息化 | 泰森多边形、马斯京根演算、单位线 |
 | [防洪概论课程-代码开发](#三防洪概论课程-代码开发) | 防洪概论 | 水库调洪演算（试算法 / RK4 数值法） |
 
+---
+
+## 前端水文计算工作台（推荐）
+
+> 不想逐个改脚本路径、改参数？直接打开本地 Web 操作台，选课程 → 选算法 → 上传数据 → 一键运行。
+
+![HydroLab 工作台总览：课程切换、算法卡片与三栏工作区](docs/workbench-overview.png)
+
+![运行结果：参数配置、原始数据、命令行输出与结果图表](docs/workbench-result.png)
+
+![HydroLab 交互演示：切换课程、选择算法、运行并查看结果](docs/workbench-demo.gif)
+
+### 一键启动
+
+**Windows**：双击仓库根目录的 `start_workbench.bat`。
+
+**macOS / Linux**：
+
+```bash
+./start_workbench.sh
+```
+
+**手动启动**：
+
+```bash
+python -m pip install -r requirements.txt
+python workbench/start.py
+```
+
+启动后自动打开 `http://127.0.0.1:8765`。也可以指定端口：
+
+```bash
+python workbench/start.py --port 8766
+```
+
+### 三栏布局
+
+页面固定为三栏，从左到右依次是：
+
+1. **模块参数配置**：上传文件、填写初始参数、运行算法；
+2. **原始数据**：预览 CSV 表格 / Shapefile 属性、文件行列数和内置示例标记；
+3. **运行结果**：命令行输出、结果图片、结果数据表、CSV 下载。
+
+顶部课程标签可切换：
+
+- 工程水文学
+- 水利信息化
+- 防洪概论
+
+课程切换后，算法卡片自动更新；点击任意算法即可进入对应工作区。每个算法都带有内置示例数据，点开即可运行，不需要先准备数据。
+
+### 工作台覆盖的算法
+
+| 课程 | 算法 |
+| --- | --- |
+| 工程水文学 | 等间隔线性插值、多种插值对比、时段最大洪量、曲线面积积分校验 |
+| 水利信息化 | 泰森多边形面雨量、马斯京根 X/K 率定、马斯京根下游演算、Nash N/K、Nash 时段单位线、Sherman 单位线推求、Sherman 出口流量 |
+| 防洪概论 | 水库曲线插值、调洪演算 · 试算法、调洪演算 · RK4 |
+
+### 工作台特性
+
+- **本地优先**：Flask 只监听 `127.0.0.1`，计算在本机 Python 进程完成，不上传服务器；
+- **三栏联动**：上传文件后自动预览，参数默认填入原脚本默认值；
+- **结果完整**：命令行日志、Matplotlib 深色图表、结果表和 CSV 下载同时展示；
+- **图表可放大**：点击结果图打开 Lightbox；
+- **主题一致**：深色玻璃 UI，与水文过程线 / 水库调洪图配色统一；
+- **兼容原脚本**：原课程脚本保留，工作台通过 `workbench/` 中的算法适配层调用同一套计算逻辑；
+- **默认示例**：`workbench/samples/` 内置 CSV 与 Shapefile zip 示例，可一键替换为用户自己的数据。
+
+### 目录（工作台部分）
+
+```text
+workbench/
+├── app.py                 # Flask API
+├── start.py               # 一键启动入口
+├── catalog.py             # 课程 / 算法 / 表单 / 示例文件目录
+├── common.py              # CSV 读取、深色 Matplotlib 主题、运行上下文
+├── engineering.py         # 工程水文算法
+├── muskingum.py           # 马斯京根算法
+├── unit_hydrograph.py     # Nash / Sherman 单位线
+├── flood.py               # 曲线插值与水库调洪
+├── thiessen.py            # 泰森多边形
+├── samples/               # 内置示例数据
+├── static/                # 前端三栏工作台
+└── runtime/               # 运行结果（gitignore）
+```
+
+### Agent 部署
+
+- 开发与扩展说明：[Agent.md](Agent.md)
+- 一键部署提示词：[一键启动部署提示词.md](一键启动部署提示词.md)
+
+---
+
 ## 环境配置
 
 ### 1. 克隆仓库
@@ -47,6 +141,7 @@ pip install -r requirements.txt
 | scipy | 插值、数值积分 |
 | matplotlib | 结果可视化 |
 | geopandas / shapely | 泰森多边形空间分析 |
+| flask | 本地 Web 工作台 |
 | tqdm | 进度条显示 |
 
 > **说明**：部分脚本中仍保留开发时的本地绝对路径，使用前请根据下方各模块说明修改 `input_path`、`output_path` 等参数为实际路径。
@@ -58,9 +153,26 @@ pip install -r requirements.txt
 ```
 -
 ├── README.md
+├── Agent.md                     # 开发/扩展/部署指南
+├── 一键启动部署提示词.md        # 给 AI Agent 的部署提示词
+├── start_workbench.bat          # Windows 一键启动
+├── start_workbench.sh           # macOS / Linux 一键启动
 ├── requirements.txt
 ├── LICENSE
-├── ZDH                          # MIT 开源协议
+├── workbench/                   # 前端水文计算工作台
+│   ├── app.py
+│   ├── start.py
+│   ├── catalog.py
+│   ├── common.py
+│   ├── engineering.py
+│   ├── muskingum.py
+│   ├── unit_hydrograph.py
+│   ├── flood.py
+│   ├── thiessen.py
+│   ├── samples/
+│   ├── static/
+│   └── runtime/                 # gitignore
+├── docs/                        # README 效果图 / 动图
 ├── 工程水文课程-代码开发/
 │   ├── 1-线性等间隔插值数据.py
 │   ├── 1-多种插值等间隔数据.py
@@ -335,6 +447,7 @@ python 防洪概论课程-代码开发/调洪计算-龙格-库数值解法-可�
    - 水位：m
 4. **中文字体**：水利信息化模块绘图需方正姚体字体文件 `FZYTK.TTF`，请确保路径正确或替换为系统可用中文字体。
 5. **泰森多边形**：需完整的 `.shp` 及其配套文件（`.dbf`、`.shx` 等），仓库中仅含部分投影文件，请自行补充完整 Shapefile。
+6. **推荐使用工作台**：`workbench/` 已封装默认路径、参数、绘图与结果下载；原始脚本保留用于学习与二次开发。工作台运行产物位于 `workbench/runtime/`，不会提交到 Git。
 
 ---
 
@@ -348,4 +461,4 @@ python 防洪概论课程-代码开发/调洪计算-龙格-库数值解法-可�
 
 ## 许可证
 
-本项目采用 [MIT License](./ZDH) 开源协议。详见仓库根目录 `ZDH` 与 `LICENSE` 文件。
+本项目采用 [MIT License](./LICENSE) 开源协议。详见仓库根目录 `LICENSE` 文件。
