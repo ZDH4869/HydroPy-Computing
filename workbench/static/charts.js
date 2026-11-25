@@ -137,7 +137,7 @@ export function resultCharts(id, tables, config, visuals = {}) {
   };
   return (specs[id] || []).flatMap((spec) => {
     const table = tables[spec.index || 0];
-    const chartSource = spec.x === exactTime && exactTime
+    const chartSource = exactTime && spec.x === exactTime
       ? { columns: [...table.columns, exactTime], rows: table.rows.map((row, i) => [...row, visuals.interpolation_times[i]]) }
       : spec.source || table;
     const chart = makeChart(chartSource, spec);
@@ -394,7 +394,20 @@ export function mountChart(host, model, domain = {}) {
         ctx.lineCap = "round";
         ctx.strokeStyle = color;
         ctx.setLineDash(DASHES[series.index % DASHES.length]);
+        const progress = frame?.track === model.track && ["gauge", "reservoir", "reach", "rain"].includes(frame.kind)
+          ? x(frame.x) : null;
+        if (progress !== null) ctx.globalAlpha = 0.55;
         ctx.stroke();
+        ctx.globalAlpha = 1;
+        if (progress !== null && progress > left) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(left - 3, top - 4, Math.min(right, progress) - left + 3, bottom - top + 8);
+          ctx.clip();
+          trace();
+          ctx.stroke();
+          ctx.restore();
+        }
         ctx.setLineDash([]);
         if (points.length <= 35) {
           ctx.fillStyle = color;
@@ -501,53 +514,4 @@ export function mountChart(host, model, domain = {}) {
     draw();
   };
   return destroy;
-}
-
-export function drawTerrain(canvas) {
-  const stage = canvas.parentElement;
-  function draw() {
-    const width = stage.clientWidth;
-    const height = stage.clientHeight;
-    if (!width || !height) return;
-    const ctx = fitCanvas(canvas, width, height);
-    const gradient = ctx.createLinearGradient(0, 0, width, height);
-    gradient.addColorStop(0, "#112f28");
-    gradient.addColorStop(0.53, "#163e33");
-    gradient.addColorStop(1, "#1b4836");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, width, height);
-
-    const sx = Math.max(width * 0.63, 460);
-    const sy = height * 2.1;
-    const centerX = width * 0.84;
-    const centerY = height * 0.53;
-    // Warped concentric isolines create the terrain illustration behind the heading.
-    for (let ring = 1; ring <= 36; ring++) {
-      const r = ring / 26;
-      ctx.beginPath();
-      for (let i = 0; i <= 260; i++) {
-        const theta = i / 260 * Math.PI * 2;
-        const wave = 1 + 0.18 * Math.sin(3 * theta + r * 5) + 0.13 * Math.cos(5 * theta - r * 3) +
-          0.065 * Math.sin(9 * theta + r * 7) + 0.034 * Math.cos(15 * theta - r * 3);
-        const x = centerX + sx * (r * wave * Math.cos(theta) - 0.18 * r);
-        const y = centerY + sy * r * (0.53 + 0.12 * Math.cos(theta * 2 + r)) * wave * Math.sin(theta) -
-          height * 0.51 * r * Math.cos(theta);
-        if (i) ctx.lineTo(x, y);
-        else ctx.moveTo(x, y);
-      }
-      ctx.closePath();
-      ctx.lineWidth = ring % 5 === 0 ? 1.1 : 0.65;
-      ctx.strokeStyle = ring % 5 === 0 ? "#b4cd7e76" : "#a3c79c52";
-      ctx.stroke();
-    }
-    const mask = ctx.createLinearGradient(0, 0, width, 0);
-    mask.addColorStop(0, "#112f28");
-    mask.addColorStop(0.22, "#12342bec");
-    mask.addColorStop(0.52, "#15392b4d");
-    mask.addColorStop(0.82, "#17403100");
-    ctx.fillStyle = mask;
-    ctx.fillRect(0, 0, width, height);
-  }
-  new ResizeObserver(draw).observe(stage);
-  draw();
 }

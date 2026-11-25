@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light">
-  <meta name="theme-color" content="#14392e">
-  <meta name="description" content="HydroLab 水文计算工作台。使用内置示例或自己的数据，分析洪水过程、流域雨量与水库调洪。">
-  <title>HydroLab · 水文计算工作台</title>
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#091522">
+  <meta name="description" content="HydroLab 水文计算助手。分析洪水过程、流域雨量与水库调洪，回放真实算例的计算结果。">
+  <title>HydroLab · 水文计算助手</title>
   <link rel="stylesheet" href="/static/styles.css">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C8 8 5 12 5 15a7 7 0 0 0 14 0c0-3-3-7-7-13Z' fill='%232c644c'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C8 8 5 12 5 15a7 7 0 0 0 14 0c0-3-3-7-7-13Z' fill='%2366e7f5'/%3E%3C/svg%3E">
   <script type="module" src="/static/app.js"></script>
 </head>
 <body>
@@ -28,14 +28,31 @@
 
   <main class="layout">
     <section class="hero" aria-labelledby="pageTitle">
-      <canvas id="terrain" aria-hidden="true"></canvas>
+      <img class="scene-image" id="sceneImage" src="/static/scenes/basin.webp" alt="" fetchpriority="high">
+      <canvas id="sceneOverlay" aria-hidden="true"></canvas>
       <div class="hero-content">
-        <p class="hero-label">HYDROLOGY WORKBENCH</p>
-        <h1 id="pageTitle">水文计算工作台<span>.</span></h1>
-        <p class="hero-description">从观测数据出发，探索洪水过程、流域面雨量与水库调洪。</p>
+        <p class="hero-label" id="heroLabel">水利水电工程 · 水文计算</p>
+        <h1 id="pageTitle">水文计算助手</h1>
+        <p class="hero-description" id="heroDescription">从洪水观测、河道演算到水库调洪。</p>
+        <a class="hero-link" id="heroLink" href="#workbench">进入工作区 <span aria-hidden="true">↓</span></a>
       </div>
       <div class="hero-metrics" id="catalogMetrics" aria-label="课程和算法数量" hidden></div>
+      <dl class="scene-readouts" id="sceneReadouts" aria-label="当前回放数据" hidden></dl>
+      <span id="sceneLabel" class="scene-caption">流域场景示意</span>
     </section>
+    <div class="playback" id="playback" role="group" aria-label="算例回放" hidden>
+      <div class="playback-actions">
+        <button type="button" data-play aria-label="播放" aria-pressed="false">▶</button>
+        <button type="button" data-restart aria-label="返回起点">↶</button>
+        <span data-playback-label></span>
+      </div>
+      <select data-mode aria-label="统计时段" hidden></select>
+      <input id="playhead" type="range" min="0" max="1" step="1" value="0" aria-label="回放位置">
+      <output for="playhead" aria-live="off"></output>
+      <select data-speed aria-label="播放速度">
+        <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
+      </select>
+    </div>
 
     <div class="workspace" id="workbench" tabindex="-1">
       <aside class="algorithm-nav" aria-labelledby="algorithmHeading">

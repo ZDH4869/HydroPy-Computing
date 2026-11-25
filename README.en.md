@@ -2,15 +2,15 @@
 
 [简体中文](README.md) · [Quick start](#quick-start) · [Implementation](#implementation) · [MIT license](LICENSE)
 
-HydroLab is a local workbench for civil and hydraulic engineering coursework. It turns flood hydrographs, basin rainfall estimates, and reservoir routing exercises into a workflow you can explore with bundled datasets and export as CSV.
+HydroLab is a local workbench for civil and hydraulic engineering coursework. Explore flood hydrographs, basin rainfall, and reservoir routing with bundled datasets, side-by-side comparisons, interactive playback, and CSV export.
 
-![HydroLab workbench showing a bundled flood hydrograph](docs/portfolio/overview.png)
+![HydroLab workbench showing a bundled flood hydrograph](docs/portfolio/twin-overview.png)
 
 ## Demo
 
-The recording follows a real session. It runs an interpolation comparison, switches to RK4 reservoir routing, inspects inflow, outflow, and reservoir level, then opens the result downloads.
+The recording follows a real session. It compares observed points with interpolated curves, inspects the computed Thiessen polygons by station, then replays the reservoir level and outflow in the RK4 example.
 
-![A real HydroLab session comparing interpolation and running RK4 routing](docs/portfolio/workbench.gif)
+![A real HydroLab session showing interpolation, Thiessen polygons, and RK4 playback](docs/portfolio/twin-workbench.gif)
 
 ## Quick start
 
@@ -37,7 +37,8 @@ The workbench interface is in Simplified Chinese.
 1. Choose a course and then an algorithm. All 14 algorithms ship with runnable examples.
 2. Use a file name in the configuration card or the input switches above the plot to inspect the data. Upload or drop your own CSV files. The Thiessen workflow takes separate Shapefile ZIPs for the basin boundary and rain gauges.
 3. Set the parameters and select **运行计算** (Run), or press `Ctrl/⌘ + Enter`. Toggle a series in the legend. Hover over the plot or focus it and use the arrow keys to inspect values.
-4. Open **原始图** (Original figure) for the Python-generated analysis figure, or **结果数据与下载** (Result data and downloads) to inspect rows and export CSV. Each table preview shows up to six rows.
+4. Use the controls below the scene to play, pause, scrub, reset, or change the playback speed. Where available, **对照** (Compare) places the two processes side by side and uses shared scales for comparable quantities.
+5. Open **原始图** (Original figure) for the Python-generated analysis figure, or **结果数据与下载** (Result data and downloads) to inspect rows and export CSV. Each table preview shows up to six rows.
 
 | Course | Methods |
 | --- | --- |
@@ -48,15 +49,15 @@ The workbench interface is in Simplified Chinese.
 <details>
 <summary>View screenshots of reservoir routing and areal rainfall</summary>
 
-![RK4 routing with inflow and outflow hydrographs and summary metrics](docs/portfolio/routing.png)
+![RK4 routing with inflow and outflow hydrographs and summary metrics](docs/portfolio/twin-routing.png)
 
-![Thiessen polygon rainfall analysis with a basin map and summary metrics](docs/portfolio/thiessen.png)
+![Thiessen polygon rainfall analysis with a basin map and summary metrics](docs/portfolio/twin-thiessen.png)
 
 </details>
 
 ## Implementation
 
-Flask supplies the algorithm catalog, form fields, defaults, and bundled samples. A run sends parameters and file tokens to the corresponding Python runner, which returns a summary and links to its CSV and Matplotlib artifacts. The browser renders hydrographs and flood-volume comparisons using Canvas. Reservoir variables with different units have separate views. For spatial analysis, GeoPandas, Shapely, and SciPy produce the basin analysis and the workbench displays the original Thiessen map.
+Flask supplies the algorithm catalog, form fields, defaults, and bundled samples. A run sends parameters and file tokens to the corresponding Python runner, which returns a summary and links to its CSV and Matplotlib artifacts. The browser renders hydrographs and flood-volume comparisons using Canvas. Reservoir variables with different units have separate views. GeoPandas, Shapely, and SciPy compute the Thiessen polygons. The interactive result map uses the computed polygon geometry and projected gauge coordinates, and each station shows rainfall, control area, weight, and its weighted contribution.
 
 ```mermaid
 flowchart LR
@@ -70,14 +71,14 @@ flowchart LR
 
 Input plots use the API preview and label truncated data. Result plots use the full result CSV when available. Each export comes from the same Python run. The frontend handles presentation, and the Python scripts and runners handle the numerical work.
 
-The legacy interpolation CSV stores whole hours. With a 30-minute step, the interactive chart follows record order and the original calculation figure shows the exact timestamps.
+Playback follows the computed timestamps, flood-volume windows, or station records. The 3D backgrounds and reservoir section are illustrations. The displayed waterline is scaled to the current run. Interpolation playback uses the exact computation timestamps, including 30-minute steps, and the CSV retains its original whole-hour field.
 
 ### Repository layout
 
 ```text
 .
 ├── workbench/
-│   ├── static/                  # HTML, CSS, workspace interaction, Canvas charts
+│   ├── static/                  # Scene images, Canvas charts, playback, and comparisons
 │   ├── app.py                   # Flask API, previews, and algorithm dispatch
 │   ├── catalog.py               # Courses, algorithms, fields, and sample configuration
 │   ├── common.py                # Data I/O, Matplotlib theme, and run outputs

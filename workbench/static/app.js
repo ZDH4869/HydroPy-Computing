@@ -1,4 +1,5 @@
-import { drawTerrain, inputCharts, mountChart, parseResultCsv, resultCharts } from "./charts.js";
+import { inputCharts, mountChart, parseResultCsv, resultCharts } from "./charts.js";
+import { buildPresentation, createPlayback, createScene, mountStationMap } from "./simulation.js";
 
 const ICONS = {
   river: '<path d="M3 7c3-3 6-3 9 0s6 3 9 0M3 12c3-3 6-3 9 0s6 3 9 0M3 17c3-3 6-3 9 0s6 3 9 0"/>',
@@ -28,9 +29,16 @@ const valueText = (value) => value === null || value === undefined || value === 
 let catalog;
 let workspace;
 let activeRun;
-let unmountPlot;
+let plots = [];
+let scene;
+let playback;
 let lightboxTrigger;
-const viewKey = { input: "输入", output: "结果", original: "原始图" };
+const viewKey = { input: "输入", output: "结果", compare: "对照", original: "原始图" };
+const sceneViews = {
+  engineering: ["station", "水文观测站示意"],
+  informatization: ["network", "示意底图 · 控制区见计算结果"],
+  flood: ["reservoir", "水库剖面示意 · 水位按本次算例缩放"],
+};
 
 async function api(url, options) {
   const response = await fetch(url, options);
@@ -62,12 +70,34 @@ function buildWorkspace(algo) {
   };
 }
 
-function selectAlgorithm(id, reset = false) {
+function renderScene(overview = false) {
+  const [name, caption] = overview ? ["basin", "流域场景示意"] : sceneViews[workspace.algo.course];
+  scene.setScene(name);
+  $(".hero").dataset.scene = name;
+  $("#sceneLabel").textContent = caption;
+  $("#heroLabel").textContent = overview ? "水利水电工程 · 水文计算" : $("#breadcrumb").textContent;
+  $("#pageTitle").textContent = overview ? "水文计算助手" : workspace.algo.name;
+  $("#heroDescription").textContent = overview ? "从洪水观测、河道演算到水库调洪。" : workspace.algo.short;
+  $("#heroLink").hidden = !overview;
+  $("#catalogMetrics").hidden = !overview;
+  $(".analysis-heading").classList.toggle("sr-only", !overview);
+}
+
+function selectAlgorithm(id, reset = false, overview = false) {
   const algo = catalog.algorithms.find((item) => item.id === id);
-  if (!algo || (workspace?.algo.id === id && !reset)) return;
+  if (!algo) return;
+  if (workspace?.algo.id === id && !reset) {
+    if ($(".hero").dataset.scene === "basin") {
+      renderScene();
+      history.replaceState(null, "", `#${algo.id}`);
+    }
+    return;
+  }
+  playback.load();
   workspace = buildWorkspace(algo);
-  history.replaceState(null, "", `#${algo.id}`);
+  if (!overview) history.replaceState(null, "", `#${algo.id}`);
   renderNavigation();
+  renderScene(overview);
   renderSettings();
   renderChart();
   renderDetails();
@@ -269,15 +299,53 @@ function showOriginal(images) {
   ).join("")}</div>`;
 }
 
+function applyFrame(frame) {
+  scene.setFrame(frame);
+  for (const plot of plots) {
+    plot.setFrame(workspace?.view === "input" ? null : frame?.kind === "window" && workspace?.view === "output"
+      ? { ...frame, track: "duration", x: frame.durationIndex, window: null }
+      : frame);
+  }
+}
+
+function plotChart(host, model, domain) {
+  const plot = mountChart(host, model, domain);
+  plots.push(plot);
+  plot.setFrame(playback.current());
+}
+
+function renderComparison(result) {
+  const { comparison, comparisonLabel } = result.presentation;
+  $("#chartTitle").textContent = comparisonLabel || "算例对照";
+  const grid = document.createElement("div");
+  grid.className = comparison.length === 1 ? "comparison single" : "comparison";
+  for (const { label, model, domain } of comparison) {
+    const panel = document.createElement("section");
+    const heading = document.createElement("h4");
+    const plot = document.createElement("div");
+    heading.textContent = label;
+    panel.append(heading, plot);
+    grid.append(panel);
+    plotChart(plot, model, domain);
+  }
+  $("#chartMount").replaceChildren(grid);
+}
+
 function renderChart() {
-  unmountPlot?.();
-  unmountPlot = undefined;
+  plots.forEach((destroy) => destroy());
+  plots = [];
   const context = workspace;
   const result = context.result;
+  $(".analysis-grid").dataset.hasResult = String(Boolean(result?.ok));
   const files = context.algo.files;
   const focused = document.activeElement;
   const views = [{ value: "input", label: viewKey.input }, { value: "output", label: viewKey.output }];
-  if (result?.groups.length && result.images?.length) views.push({ value: "original", label: viewKey.original });
+  if (result?.presentation?.comparison.length) {
+    views.push({ value: "compare", label: result.presentation.comparisonLabel || viewKey.compare });
+  }
+  if ((result?.groups.length || result?.presentation?.map) && result.images?.length) {
+    views.push({ value: "original", label: viewKey.original });
+  }
   $("#viewSwitch").innerHTML = choiceButtons(views, context.view, "view");
   setChoices($("#fileTabs"), context.view === "input" ? files.map(({ key, label }) => ({ value: key, label })) : [], context.fileKey, "file-tab");
 
@@ -299,7 +367,8 @@ function renderChart() {
     const index = Math.min(context.inputGroup, Math.max(0, groups.length - 1));
     setChoices($("#chartGroups"), groups.map((group, i) => ({ value: i, label: group.label })), index, "group");
     if (groups[index]) {
-      unmountPlot = mountChart($("#chartMount"), groups[index].chart);
+      const plot = mountChart($("#chartMount"), groups[index].chart);
+      plots.push(plot);
     } else if (preview?.kind === "shapefile") {
       emptyChart("空间数据已就绪", "运行计算后查看流域边界、站点与泰森多边形。");
     } else if (preview) {
@@ -333,6 +402,17 @@ function renderChart() {
     emptyChart(result ? "本次计算未完成" : "等待运行", result?.error || "运行后在此查看过程线、关键指标和完整结果。");
     return;
   }
+  if (context.view === "compare") {
+    renderComparison(result);
+    return;
+  }
+  if (context.view === "output" && result.presentation?.map) {
+    $("#chartTitle").textContent = "泰森多边形控制区";
+    const map = mountStationMap($("#chartMount"), result.presentation.map, playback.seek);
+    plots.push(map);
+    map.setFrame(playback.current());
+    return;
+  }
   if (context.view === "original" || (!result.groups.length && result.images?.length)) {
     if (context.view === "output") $("#chartTitle").textContent = result.images[0].title;
     showOriginal(result.images);
@@ -346,7 +426,8 @@ function renderChart() {
   }
   $("#chartTitle").textContent = group.label;
   setChoices($("#chartGroups"), result.groups.map((item, index) => ({ value: index, label: item.label })), context.outputGroup, "group");
-  unmountPlot = mountChart($("#chartMount"), group.chart);
+  plotChart($("#chartMount"), group.chart);
+  if (playback.current()?.kind === "window") applyFrame(playback.current());
   const { table } = group;
   $("#chartFoot").hidden = false;
   const points = table.rows.length < table.total_rows
@@ -357,10 +438,11 @@ function renderChart() {
     ${table.csv_url ? `<a class="download-link" href="${escapeHtml(table.csv_url)}" download>${icon("download")} 下载 CSV</a>` : ""}`;
 }
 
-function revealMobileChart() {
+function revealMobileResult() {
   if (!window.matchMedia("(max-width: 630px)").matches) return;
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  $(".chart-panel").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  const target = $("#playback").hidden ? $(".chart-panel") : $(".hero");
+  target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
 }
 
 function renderDetails() {
@@ -444,15 +526,18 @@ async function runAlgorithm() {
   }
   const files = Object.fromEntries(Object.entries(context.files).filter(([, entry]) => entry.token)
     .map(([key, entry]) => [key, entry.token]));
+  const curvePreview = context.files.curve_csv?.preview;
   activeRun = context;
   context.result = null;
   context.changed = false;
   context.view = "output";
   context.outputGroup = 0;
+  playback.load();
+  renderScene();
+  if (!location.hash) history.replaceState(null, "", `#${context.algo.id}`);
   updateRunState();
   renderChart();
   renderDetails();
-  revealMobileChart();
 
   try {
     const data = await api("/api/run", {
@@ -460,17 +545,23 @@ async function runAlgorithm() {
       body: JSON.stringify({ algorithm: context.algo.id, params, files }),
     });
     const chartTables = await fullChartTables(data.tables || []);
-    context.result = { ...data, groups: resultCharts(context.algo.id, chartTables, params) };
+    const visuals = data.visuals || {};
+    const groups = resultCharts(context.algo.id, chartTables, params, visuals);
+    const presentation = buildPresentation(context.algo, chartTables, groups, visuals, params, curvePreview);
+    context.result = { ...data, groups, presentation };
+    if (context.view === "output" && presentation.comparison.length) context.view = "compare";
   } catch (error) {
     context.result = { ...error.payload, ok: false, error: error.message, groups: [] };
     if (workspace === context) toast("运行失败", error.message, true);
   } finally {
     activeRun = null;
+    updateRunState();
     if (workspace === context) {
       renderChart();
       renderDetails();
+      playback.load(context.result?.presentation?.modes);
+      revealMobileResult();
     }
-    updateRunState();
   }
 }
 
@@ -489,9 +580,13 @@ function activateChoice(target, key, action) {
 }
 
 function bindEvents() {
+  $("#heroLink").addEventListener("click", (event) => {
+    event.preventDefault();
+    $("#workbench").focus();
+  });
   $("#courseTabs").addEventListener("click", ({ target }) => activateChoice(target, "course", (id) => {
     const first = catalog.algorithms.find((algo) => algo.course === id);
-    if (first && workspace.algo.course !== id) selectAlgorithm(first.id);
+    if (first && (workspace.algo.course !== id || $(".hero").dataset.scene === "basin")) selectAlgorithm(first.id);
   }));
   $("#algoRail").addEventListener("click", ({ target }) => activateChoice(target, "algo", selectAlgorithm));
   $("#viewSwitch").addEventListener("click", ({ target }) => activateChoice(target, "view", (view) => {
@@ -535,7 +630,7 @@ function bindEvents() {
   list.addEventListener("click", ({ target }) => {
     if (buttonAction(target, "preview-file", (key) => {
       chooseFile(key);
-      revealMobileChart();
+      if (window.matchMedia("(max-width: 630px)").matches) $(".chart-panel").scrollIntoView();
     })) return;
     if (buttonAction(target, "upload", (key) => $(`[data-file-input="${key}"]`, list).click())) return;
     buttonAction(target, "clear", (key) => {
@@ -587,19 +682,20 @@ function bindEvents() {
 }
 
 async function init() {
+  scene = createScene($("#sceneOverlay"), $("#sceneImage"));
+  playback = createPlayback($("#playback"), $("#sceneReadouts"), applyFrame);
   bindEvents();
   $("#runIcon").innerHTML = icon("play");
-  drawTerrain($("#terrain"));
   api("/api/health").then((health) => setEngine(health.ok, health.ok ? "本地引擎在线" : "本地引擎离线"))
     .catch(() => setEngine(false, "本地引擎离线"));
   try {
     catalog = await api("/api/catalog");
-    const initial = catalog.algorithms.find((algo) => algo.id === location.hash.slice(1)) || catalog.algorithms[0];
+    const linked = catalog.algorithms.find((algo) => algo.id === location.hash.slice(1));
+    const initial = linked || catalog.algorithms[0];
     if (!initial) throw new Error("算法目录为空");
     $("#catalogMetrics").innerHTML = `<div><strong>${catalog.courses.length}</strong><span>门课程</span></div>
       <div><strong>${catalog.algorithms.length}</strong><span>项算法</span></div>`;
-    $("#catalogMetrics").hidden = false;
-    selectAlgorithm(initial.id);
+    selectAlgorithm(initial.id, false, !linked);
   } catch (error) {
     $("#algoTitle").textContent = "无法加载算法目录";
     $("#algoDescription").textContent = error.message;
