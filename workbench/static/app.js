@@ -1,5 +1,6 @@
 import { inputCharts, mountChart, parseResultCsv, resultCharts } from "./charts.js";
 import { buildPresentation, mountStationMap } from "./presentation.js";
+import { loadCaseHistory, saveCaseRun } from "./case-storage.js";
 
 const ICONS = {
   river: '<path d="M3 7c3-3 6-3 9 0s6 3 9 0M3 12c3-3 6-3 9 0s6 3 9 0M3 17c3-3 6-3 9 0s6 3 9 0"/>',
@@ -30,6 +31,17 @@ let workspace;
 let activeRun;
 let plots = [];
 let lightboxTrigger;
+const workspaces = new Map();
+const lastAlgorithmByCourse = new Map();
+const caseRuns = new Map();
+const comparedRuns = ["", ""];
+const casePlots = [null, null];
+const runTimestamp = new Intl.DateTimeFormat("zh-CN", {
+  year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+  fractionalSecondDigits: 3,
+});
+let historyLoading = true;
+let historyUnavailable = false;
 const viewKey = { input: "输入", output: "结果", compare: "对照", original: "原始图" };
 const sceneLabels = {
   engineering: "水文观测场景示意",
@@ -53,7 +65,7 @@ function toast(title, message = "", error = false) {
 }
 
 function setEngine(ready, label) {
-  $("#engineStatus").innerHTML = `<span class="status-dot ${ready ? "ready" : "error"}"></span>${label}`;
+  $("#engineStatus").innerHTML = `<span class="status-dot ${ready ? "ready" : "error"}"></span><span>${label}</span>`;
 }
 
 function buildWorkspace(algo) {
@@ -63,12 +75,14 @@ function buildWorkspace(algo) {
   }]));
   return {
     algo, files, fileKey: algo.files.find((spec) => spec.sample)?.key || algo.files[0]?.key,
+    values: Object.fromEntries(algo.fields.map((field) => [field.key, String(field.default ?? "")])),
     inputGroup: 0, outputGroup: 0, selectedWindow: 0, selectedStation: 0,
-    view: "input", result: null, changed: false,
+    pane: "settings", view: "input", result: null, changed: false,
   };
 }
 
 function showPane(pane, focus = false) {
+  workspace.pane = pane;
   $(".workspace").dataset.pane = pane;
   for (const button of $$("#workspaceTabs button")) {
     const active = button.dataset.pane === pane;
@@ -80,8 +94,10 @@ function showPane(pane, focus = false) {
 function selectAlgorithm(id, reset = false) {
   const algo = catalog.algorithms.find((item) => item.id === id);
   if (!algo || (workspace?.algo.id === id && !reset)) return;
-  workspace = buildWorkspace(algo);
-  showPane("settings");
+  if (reset || !workspaces.has(id)) workspaces.set(id, buildWorkspace(algo));
+  workspace = workspaces.get(id);
+  lastAlgorithmByCourse.set(algo.course, id);
+  showPane(workspace.pane);
   history.replaceState(null, "", `#${algo.id}`);
   renderNavigation();
   renderSettings();
@@ -111,7 +127,7 @@ function renderNavigation() {
 
 function fieldHtml(field) {
   const id = `field-${field.key}`;
-  const value = field.default ?? "";
+  const value = workspace.values[field.key];
   const attrs = `id="${id}" data-field="${field.key}"${field.help ? ` aria-describedby="${id}-help"` : ""}`;
   let control;
   if (field.type === "select") {
@@ -146,6 +162,7 @@ function renderSettings() {
   $("#advancedBox").close();
   $(".settings-body").scrollTop = 0;
   renderFiles();
+  refreshColumns(workspace.files[workspace.fileKey]?.preview);
 }
 
 function renderFiles() {
@@ -171,6 +188,7 @@ function refreshColumns(preview) {
     const current = select.value;
     select.replaceChildren(...preview.columns.map((name) => new Option(name, name)));
     select.value = preview.columns.includes(current) ? current : preview.columns[0];
+    workspace.values[select.dataset.field] = select.value;
   });
 }
 
@@ -218,12 +236,12 @@ async function uploadFile(key, file) {
   try {
     const data = await api("/api/upload", { method: "POST", body: form });
     Object.assign(entry, { token: data.token, name: data.name || file.name, sample: false, preview: data, error: "" });
+    context.fileKey = key;
+    context.inputGroup = 0;
+    context.view = "input";
+    if (context.result || activeRun === context) context.changed = true;
     if (workspace === context) {
-      context.fileKey = key;
-      context.inputGroup = 0;
-      context.view = "input";
       refreshColumns(data);
-      markEdited();
       renderChart();
       toast("文件已载入", entry.name);
     }
@@ -286,8 +304,8 @@ function showOriginal(images) {
   ).join("")}</div>`;
 }
 
-function plotChart(host, model, domain) {
-  const plot = mountChart(host, model, domain);
+function plotChart(host, model) {
+  const plot = mountChart(host, model);
   plots.push(plot);
   return plot;
 }
@@ -297,14 +315,14 @@ function renderComparison(result) {
   $("#chartTitle").textContent = comparisonLabel || "算例对照";
   const grid = document.createElement("div");
   grid.className = comparison.length === 1 ? "comparison single" : "comparison";
-  const charts = comparison.map(({ label, model, domain }) => {
+  const charts = comparison.map(({ label, model }) => {
     const panel = document.createElement("section");
     const heading = document.createElement("h4");
     const plot = document.createElement("div");
     heading.textContent = label;
     panel.append(heading, plot);
     grid.append(panel);
-    return plotChart(plot, model, domain);
+    return plotChart(plot, model);
   });
   $("#chartMount").replaceChildren(grid);
   if (!windows?.length) return;
@@ -437,6 +455,12 @@ function renderChart() {
     ${table.csv_url ? `<a class="download-link" href="${escapeHtml(table.csv_url)}" download>${icon("download")} 下载 CSV</a>` : ""}`;
 }
 
+function summaryHtml(summary) {
+  return summary.map((item) =>
+    `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(valueText(item.value))}<span>${escapeHtml(item.unit)}</span></dd></div>`
+  ).join("");
+}
+
 function renderDetails() {
   const result = workspace.result;
   const host = $("#outputDetails");
@@ -450,9 +474,7 @@ function renderDetails() {
     metrics.replaceChildren();
     return;
   }
-  const summary = (result.summary || []).map((item) =>
-    `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(valueText(item.value))}<span>${escapeHtml(item.unit)}</span></dd></div>`
-  ).join("");
+  const summary = summaryHtml(result.summary || []);
   metrics.innerHTML = summary ? `<h2 id="summaryHeading">关键指标</h2><dl class="summary-grid">${summary}</dl>` : "";
   host.innerHTML = [
     result.tables?.length && '<button class="detail-button" type="button" data-detail="tables">结果数据与下载</button>',
@@ -533,6 +555,116 @@ async function fullChartTables(tables) {
   }));
 }
 
+function rememberRun(algo, result, params, inputs) {
+  const { groups, presentation } = result;
+  const charts = groups.length
+    ? groups.map(({ label, chart }) => ({ label, model: chart }))
+    : presentation.comparison;
+  const run = {
+    id: result.run_id,
+    name: algo.name,
+    course: catalog.courses.find((item) => item.id === algo.course).name,
+    finished: Date.now(),
+    summary: result.summary || [],
+    charts,
+    map: presentation.map,
+    inputs,
+    params: algo.fields.map(({ key, label, unit }) => ({ label, unit, value: params[key] })),
+  };
+  caseRuns.set(run.id, run);
+  updateCaseHistory();
+  saveCaseRun(run).catch(() => {
+    historyUnavailable = true;
+    updateCaseHistory();
+    toast("算例仅保存在当前页面", "浏览器本地存储不可用或空间不足。", true);
+  });
+}
+
+function renderCaseSide(index) {
+  const host = $(`[data-case-side="${index}"]`);
+  casePlots[index]?.();
+  casePlots[index] = null;
+  const run = caseRuns.get(comparedRuns[index]);
+  host.hidden = !run;
+  if (!run) {
+    host.replaceChildren();
+    return;
+  }
+  const config = [...run.inputs, ...run.params].map(({ label, value, unit }) =>
+    `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(valueText(value))}${unit ? ` ${escapeHtml(unit)}` : ""}</dd></div>`
+  ).join("");
+  host.innerHTML = `
+    <header class="case-card-heading">
+      <div><h3>${escapeHtml(run.name)}</h3><p>${escapeHtml(run.course)}</p></div>
+      ${run.charts.length > 1 ? '<label>图表<select class="case-chart-select"></select></label>' : ""}
+    </header>
+    <div class="case-plot"></div>
+    ${run.summary.length ? `<dl class="summary-grid" aria-label="关键指标">${summaryHtml(run.summary)}</dl>` : ""}
+    ${config ? `<details class="case-config"><summary>输入文件与计算参数</summary><dl>${config}</dl></details>` : ""}
+  `;
+  const plot = $(".case-plot", host);
+  if (run.map) {
+    casePlots[index] = mountStationMap(plot, run.map, 0, () => {});
+  } else if (run.charts.length) {
+    const chartSelect = $(".case-chart-select", host);
+    const draw = () => {
+      casePlots[index]?.();
+      casePlots[index] = mountChart(plot, run.charts[Number(chartSelect?.value || 0)].model);
+    };
+    if (chartSelect) {
+      chartSelect.replaceChildren(...run.charts.map(({ label }, i) => new Option(label, i)));
+      chartSelect.addEventListener("change", draw);
+    }
+    draw();
+  } else {
+    plot.hidden = true;
+  }
+}
+
+function updateCaseHistory(opening = false) {
+  $("#caseCount").textContent = caseRuns.size;
+  if (!$("#caseDialog").open) return;
+  const runs = [...caseRuns.values()].sort((a, b) => b.finished - a.finished);
+  const message = !runs.length ? (historyLoading ? "正在读取算例记录…" : "完成两次计算后，即可在这里并排对比。")
+    : runs.length === 1 ? "再运行一次计算，即可对比两次结果。" : "";
+  const storageNote = historyUnavailable ? "浏览器本地存储不可用，部分记录仅保存在当前页面。" : "";
+  $("#caseStatus").textContent = [message, storageNote].filter(Boolean).join(" ");
+  $("#caseToolbar").hidden = !runs.length;
+  for (const [index, select] of $$(".case-run-select").entries()) {
+    const previous = comparedRuns[index];
+    comparedRuns[index] ||= runs.find(({ id }) => id !== comparedRuns[1 - index])?.id || "";
+    select.replaceChildren(
+      new Option("选择运行记录", ""),
+      ...runs.map((run) => new Option(`${run.name} · ${runTimestamp.format(run.finished)}`, run.id)),
+    );
+    select.value = comparedRuns[index];
+    if (opening || previous !== comparedRuns[index]) renderCaseSide(index);
+  }
+}
+
+function bindCaseHistory() {
+  const dialog = $("#caseDialog");
+  $("#caseButton").addEventListener("click", () => {
+    dialog.showModal();
+    updateCaseHistory(true);
+  });
+  $$(".case-run-select").forEach((select, index) => select.addEventListener("change", () => {
+    comparedRuns[index] = select.value;
+    renderCaseSide(index);
+  }));
+  dialog.addEventListener("close", () => {
+    casePlots.forEach((destroy) => destroy?.());
+    casePlots.fill(null);
+    $$("[data-case-side]", dialog).forEach((side) => side.replaceChildren());
+  });
+  loadCaseHistory().then((runs) => {
+    for (const run of runs) caseRuns.set(run.id, run);
+  }).catch(() => { historyUnavailable = true; }).finally(() => {
+    historyLoading = false;
+    updateCaseHistory();
+  });
+}
+
 async function runAlgorithm() {
   if ($("#runButton").disabled || !workspace) return;
   const context = workspace;
@@ -546,6 +678,7 @@ async function runAlgorithm() {
   }
   const files = Object.fromEntries(Object.entries(context.files).filter(([, entry]) => entry.token)
     .map(([key, entry]) => [key, entry.token]));
+  const inputs = Object.keys(files).map((key) => ({ label: context.files[key].spec.label, value: context.files[key].name }));
   const curvePreview = context.files.curve_csv?.preview;
   activeRun = context;
   context.result = null;
@@ -571,11 +704,13 @@ async function runAlgorithm() {
     if (context.view === "output" && presentation.comparison.length && !presentation.preferCombined) {
       context.view = "compare";
     }
+    rememberRun(context.algo, context.result, params, inputs);
   } catch (error) {
     context.result = { ...error.payload, ok: false, error: error.message, groups: [] };
     if (workspace === context) toast("运行失败", error.message, true);
   } finally {
     activeRun = null;
+    context.pane = "chart";
     updateRunState();
     if (workspace === context) {
       renderChart();
@@ -605,8 +740,8 @@ function bindEvents() {
     $("#workbench").focus();
   });
   $("#courseTabs").addEventListener("click", ({ target }) => activateChoice(target, "course", (id) => {
-    const first = catalog.algorithms.find((algo) => algo.course === id);
-    if (first && workspace.algo.course !== id) selectAlgorithm(first.id);
+    const next = lastAlgorithmByCourse.get(id) || catalog.algorithms.find((algo) => algo.course === id)?.id;
+    if (next && workspace.algo.course !== id) selectAlgorithm(next);
   }));
   $("#algoRail").addEventListener("click", ({ target }) => activateChoice(target, "algo", selectAlgorithm));
   $("#workspaceTabs").addEventListener("click", ({ target }) => buttonAction(target, "pane", (pane) => showPane(pane)));
@@ -635,6 +770,7 @@ function bindEvents() {
   });
   document.addEventListener("input", ({ target }) => {
     if (!target.matches("[data-field]")) return;
+    workspace.values[target.dataset.field] = target.value;
     markEdited();
     if (target.matches("[data-column]") && workspace.view === "input") {
       workspace.inputGroup = 0;
@@ -709,6 +845,7 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
+  bindCaseHistory();
   $("#runIcon").innerHTML = icon("play");
   api("/api/health").then((health) => setEngine(health.ok, health.ok ? "本地引擎在线" : "本地引擎离线"))
     .catch(() => setEngine(false, "本地引擎离线"));

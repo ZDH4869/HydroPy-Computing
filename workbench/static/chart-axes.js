@@ -41,11 +41,11 @@ function niceStep(raw, integer) {
   const power = 10 ** Math.floor(Math.log10(raw));
   const multiplier = [1, 2, 2.5, 5, 10].find((n) => n * power >= raw * (1 - 1e-10));
   const step = (multiplier || 10) * power;
-  return integer ? Math.max(1, step) : step;
+  return integer ? Math.max(1, Math.ceil(step)) : step;
 }
 
 function regularTicks(min, max, step) {
-  if (!(step > 0) || !Number.isFinite(step)) return [min, max];
+  if (!(step > 0) || !Number.isFinite(step)) return min === max ? [min] : [min, max];
   const start = Math.ceil(min / step - 1e-9);
   const end = Math.floor(max / step + 1e-9);
   const length = end - start + 1;
@@ -55,6 +55,7 @@ function regularTicks(min, max, step) {
 }
 
 export function linearScale(min, max, divisions, { padding = 0.06, zero = false, integer = false } = {}) {
+  if (zero && min === 0 && max === 0) return { range: [0, 1], values: [0, 0.5, 1], step: 0.5 };
   const singleton = integer ? 0.65 : Math.abs(min) * 0.05 || 1;
   const range = paddedExtent(min, max, padding, singleton, zero);
   const step = niceStep((range[1] - range[0]) / divisions, integer);
@@ -64,7 +65,7 @@ export function linearScale(min, max, divisions, { padding = 0.06, zero = false,
 
 export function barScale(min, max, divisions, spacing, integer = false) {
   const pad = spacing / 2;
-  const range = [min - pad, max + pad];
+  const range = [finiteOr(min - pad, min), finiteOr(max + pad, max)];
   const step = niceStep((range[1] - range[0]) / divisions, integer);
   const values = regularTicks(min, max, step);
   return { range, values: values.length ? values : [min], step };
@@ -108,7 +109,7 @@ export function numberLabel(value, step) {
   const magnitude = Math.abs(value);
   if (magnitude >= 1e8 || magnitude < 1e-4) {
     const precision = step ? Math.max(1, Math.ceil(Math.log10(magnitude / step))) : 4;
-    return value.toExponential(Math.min(14, precision));
+    return value.toExponential(Math.min(16, precision));
   }
   const digits = step ? Math.min(14, Math.max(0, Math.ceil(-Math.log10(step)) + 1)) : 6;
   if (!numberFormats.has(digits)) numberFormats.set(digits, new Intl.NumberFormat("zh-CN", { maximumFractionDigits: digits }));

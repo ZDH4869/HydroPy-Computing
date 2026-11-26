@@ -23,7 +23,12 @@
         <span>HydroLab</span>
       </a>
       <nav class="course-tabs" id="courseTabs" aria-label="课程"></nav>
-      <div class="engine-status" id="engineStatus" role="status"><span class="status-dot"></span>连接引擎中</div>
+      <div class="topbar-actions">
+        <button class="detail-button case-button" type="button" id="caseButton" aria-haspopup="dialog">
+          结果对比 <span id="caseCount">0</span>
+        </button>
+        <div class="engine-status" id="engineStatus" role="status"><span class="status-dot"></span><span>连接引擎中</span></div>
+      </div>
     </div>
   </header>
 
@@ -114,6 +119,23 @@
       <form method="dialog"><button type="submit" class="icon-button" aria-label="关闭详情">×</button></form>
     </div>
     <div id="detailsBody" class="dialog-content"></div>
+  </dialog>
+  <dialog class="detail-dialog" id="caseDialog" aria-labelledby="caseTitle">
+    <div class="dialog-heading">
+      <h2 id="caseTitle">结果对比</h2>
+      <form method="dialog"><button type="submit" class="icon-button" aria-label="关闭结果对比" autofocus>×</button></form>
+    </div>
+    <div class="dialog-content">
+      <p id="caseStatus" role="status"></p>
+      <div class="case-grid" id="caseToolbar" hidden>
+        <label>算例 A<select class="case-run-select"></select></label>
+        <label>算例 B<select class="case-run-select"></select></label>
+      </div>
+      <div class="case-grid">
+        <section class="case-card" data-case-side="0" aria-label="算例 A 的结果" hidden></section>
+        <section class="case-card" data-case-side="1" aria-label="算例 B 的结果" hidden></section>
+      </div>
+    </div>
   </dialog>
   <dialog id="lightbox" aria-labelledby="lightboxCaption">
     <button type="button" class="close-button" id="lightboxClose" aria-label="关闭">×</button>

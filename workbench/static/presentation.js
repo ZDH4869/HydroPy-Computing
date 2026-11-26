@@ -1,4 +1,5 @@
 import { makeChart, timeValue } from "./charts.js";
+import { extent } from "./chart-axes.js";
 
 const cyan = "#66e7f5";
 const amber = "#f3b066";
@@ -15,32 +16,9 @@ function panel(label, model) {
   return { label, model };
 }
 
-function span(columns) {
-  let low = Infinity;
-  let high = -Infinity;
-  for (const values of columns) {
-    for (const value of values) {
-      if (!isNumber(value)) continue;
-      low = Math.min(low, value);
-      high = Math.max(high, value);
-    }
-  }
-  return low <= high ? [low, high] : undefined;
-}
-
-function compare(panels, shareTime = true) {
+function compare(panels) {
   const enabled = panels.filter(({ model }) => model);
-  if (enabled.length < 2) return [];
-  const axisKind = enabled[0].model.axis.kind;
-  const shareX = shareTime && axisKind !== "category" && enabled.every(({ model }) => model.axis.kind === axisKind);
-  const x = shareX ? span(enabled.map(({ model }) => model.axis.values)) : undefined;
-  return enabled.map((item) => {
-    const sameUnits = enabled.filter(({ model }) => model.yLabel === item.model.yLabel);
-    const y = sameUnits.length > 1
-      ? span(sameUnits.flatMap(({ model }) => model.series.map((series) => series.values)))
-      : undefined;
-    return { ...item, domain: { x, y } };
-  });
+  return enabled.length >= 2 ? enabled : [];
 }
 
 function volumePresentation(table, observation) {
@@ -86,7 +64,7 @@ export function buildPresentation(algo, tables, groups, visuals, settings, input
     case "thiessen":
       return { comparison, map: stationMap(visuals.station_areas, table) };
     case "muskingum_xk":
-      comparison = compare([panel("蓄量与加权流量", primary?.chart), panel("X 与相关系数", secondary?.chart)], false);
+      comparison = compare([panel("蓄量与加权流量", primary?.chart), panel("X 与相关系数", secondary?.chart)]);
       break;
     case "muskingum_route":
       comparison = compare([
@@ -112,7 +90,7 @@ export function buildPresentation(algo, tables, groups, visuals, settings, input
     case "sherman_outlet":
       comparison = compare([
         panel("输入净雨", chart(visuals.rain_response, "时间(时段)", "净雨量", "净雨量 (mm)", { bars: true, color: blue })),
-        panel("计算出口流量", chart(table, "时间(时段)", "计算流量(m³/s)", flow)),
+        panel("计算出口流量", chart(table, "时间(时段)", "计算流量(m³/s)", flow, { peak: true })),
         panel("实测出口流量", chart(visuals.reference, "时间(时段)", "实测流量", flow, { color: amber })),
       ]);
       break;
@@ -127,8 +105,8 @@ export function buildPresentation(algo, tables, groups, visuals, settings, input
     case "flood_trial":
     case "flood_rk4":
       comparison = compare([
-        panel("入库过程", chart(table, "时间t/h", "入库流量Q/(m³·s⁻¹)", flow, { color: cyan })),
-        panel("下泄过程", chart(table, "时间t/h", "下泄流量q/(m³·s⁻¹)", flow, { color: amber })),
+        panel("入库过程", chart(table, "时间t/h", "入库流量Q/(m³·s⁻¹)", flow, { color: cyan, peak: true })),
+        panel("下泄过程", chart(table, "时间t/h", "下泄流量q/(m³·s⁻¹)", flow, { color: amber, peak: true })),
       ]);
       return { comparison, preferCombined: true };
   }
@@ -170,8 +148,8 @@ export function mountStationMap(host, map, selected, onSelect) {
   host.replaceChildren(stage);
   const allRings = [...rings(map.boundary), ...map.zones.flatMap(({ geometry }) => rings(geometry))];
   const points = allRings.flat().concat(map.zones.map(({ point }) => point));
-  const [lowX, highX] = span([points.map(([x]) => x)]) || [0, 1];
-  const [lowY, highY] = span([points.map(([, y]) => y)]) || [0, 1];
+  const [lowX, highX] = extent(points.map(([x]) => x));
+  const [lowY, highY] = extent(points.map(([, y]) => y));
   let focused = 0;
   let stationPoints = [];
 

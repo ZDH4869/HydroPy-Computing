@@ -37,8 +37,11 @@ The workbench interface is in Simplified Chinese.
 1. Choose a course and then an algorithm. All 14 algorithms ship with runnable examples.
 2. Use a file name in the configuration card or the input switches above the plot to inspect the data. Upload or drop your own CSV files. The Thiessen workflow takes separate Shapefile ZIPs for the basin boundary and rain gauges.
 3. Set the parameters and select **运行计算** (Run), or press `Ctrl/⌘ + Enter`. Toggle a series in the legend. Hover over the plot or focus it and use the arrow keys to inspect values.
-4. Where available, **对照** (Compare) places related processes side by side and uses shared scales for comparable quantities. **洪量区间** (Flood-volume interval) highlights the computed maximum-volume window for the selected duration. Reservoir routing also has separate level and storage views.
+4. Where available, **对照** (Compare) places related processes side by side. Each plot scales to its own data and plot area, while series overlaid in a single plot share axes. **洪量区间** (Flood-volume interval) highlights the computed maximum-volume window for the selected duration. Reservoir routing also has separate level and storage views.
 5. Use **原始图** (Original figure) for the Python-generated analysis figure. Input records, result data and downloads, and calculation logs open in dialogs. Each table preview shows up to six rows, and the full result is available as CSV.
+6. Switch between algorithms or courses and return to your previous workspace. Open **结果对比** (Compare runs) in the header to choose any two successful runs, including different parameter sets for the same algorithm. Each chart scales independently, and Thiessen runs can be inspected on their station maps.
+
+Comparison history is stored locally for the current browser and workbench address. Charts, maps, metrics, and run parameters remain available after a refresh. Download the original CSVs and figures if you need to keep those files.
 
 | Course | Methods |
 | --- | --- |

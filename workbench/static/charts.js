@@ -325,7 +325,7 @@ export function mountChart(host, model) {
       ctx.fillText(labels[index], left - 7, py + 3, left - 9);
     });
     grid(left, bottom, right, bottom, "#adcce77a");
-    let lastLabelEnd = 0;
+    let lastLabelEnd = -Infinity;
     for (const value of xScale.values) {
       const px = x(value);
       grid(px, top, px, bottom, "#afcfe41a");
@@ -393,7 +393,7 @@ export function mountChart(host, model) {
           ctx.beginPath();
           points.forEach(([px, py], index) => index ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
         };
-        if (order === 0 && !model.bars && points.length > 1) {
+        if (order === 0 && !model.bars && yScale.range[0] === 0 && points.length > 1) {
           trace();
           const gradient = ctx.createLinearGradient(0, top, 0, bottom);
           gradient.addColorStop(0, color + "38");
