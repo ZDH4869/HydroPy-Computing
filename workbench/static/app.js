@@ -1,5 +1,5 @@
 import { inputCharts, mountChart, parseResultCsv, resultCharts } from "./charts.js";
-import { buildPresentation, createPlayback, createScene, mountStationMap } from "./simulation.js";
+import { buildPresentation, mountStationMap } from "./presentation.js";
 
 const ICONS = {
   river: '<path d="M3 7c3-3 6-3 9 0s6 3 9 0M3 12c3-3 6-3 9 0s6 3 9 0M3 17c3-3 6-3 9 0s6 3 9 0"/>',
@@ -10,7 +10,6 @@ const ICONS = {
   download: '<path d="M12 4v11m-4-4 4 4 4-4M5 17v3h14v-3"/>',
   chart: '<path d="M4 4v16h16M7 15l4-5 4 2 5-7"/>',
   play: '<path d="m9 6 9 6-9 6z" fill="currentColor" stroke="none"/>',
-  chevron: '<path d="m9 6 6 6-6 6"/>',
   expand: '<path d="M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5"/>',
 };
 
@@ -30,14 +29,12 @@ let catalog;
 let workspace;
 let activeRun;
 let plots = [];
-let scene;
-let playback;
 let lightboxTrigger;
 const viewKey = { input: "输入", output: "结果", compare: "对照", original: "原始图" };
-const sceneViews = {
-  engineering: ["station", "水文观测站示意"],
-  informatization: ["network", "示意底图 · 控制区见计算结果"],
-  flood: ["reservoir", "水库剖面示意 · 水位按本次算例缩放"],
+const sceneLabels = {
+  engineering: "水文观测场景示意",
+  informatization: "流域河网场景示意",
+  flood: "水库场景示意",
 };
 
 async function api(url, options) {
@@ -66,38 +63,27 @@ function buildWorkspace(algo) {
   }]));
   return {
     algo, files, fileKey: algo.files.find((spec) => spec.sample)?.key || algo.files[0]?.key,
-    inputGroup: 0, outputGroup: 0, view: "input", result: null, changed: false,
+    inputGroup: 0, outputGroup: 0, selectedWindow: 0, selectedStation: 0,
+    view: "input", result: null, changed: false,
   };
 }
 
-function renderScene(overview = false) {
-  const [name, caption] = overview ? ["basin", "流域场景示意"] : sceneViews[workspace.algo.course];
-  scene.setScene(name);
-  $(".hero").dataset.scene = name;
-  $("#sceneLabel").textContent = caption;
-  $("#heroLabel").textContent = overview ? "水利水电工程 · 水文计算" : $("#breadcrumb").textContent;
-  $("#pageTitle").textContent = overview ? "水文计算助手" : workspace.algo.name;
-  $("#heroDescription").textContent = overview ? "从洪水观测、河道演算到水库调洪。" : workspace.algo.short;
-  $("#heroLink").hidden = !overview;
-  $("#catalogMetrics").hidden = !overview;
-  $(".analysis-heading").classList.toggle("sr-only", !overview);
+function showPane(pane, focus = false) {
+  $(".workspace").dataset.pane = pane;
+  for (const button of $$("#workspaceTabs button")) {
+    const active = button.dataset.pane === pane;
+    button.setAttribute("aria-pressed", String(active));
+    if (active && focus && button.getClientRects().length) button.focus({ preventScroll: true });
+  }
 }
 
-function selectAlgorithm(id, reset = false, overview = false) {
+function selectAlgorithm(id, reset = false) {
   const algo = catalog.algorithms.find((item) => item.id === id);
-  if (!algo) return;
-  if (workspace?.algo.id === id && !reset) {
-    if ($(".hero").dataset.scene === "basin") {
-      renderScene();
-      history.replaceState(null, "", `#${algo.id}`);
-    }
-    return;
-  }
-  playback.load();
+  if (!algo || (workspace?.algo.id === id && !reset)) return;
   workspace = buildWorkspace(algo);
-  if (!overview) history.replaceState(null, "", `#${algo.id}`);
+  showPane("settings");
+  history.replaceState(null, "", `#${algo.id}`);
   renderNavigation();
-  renderScene(overview);
   renderSettings();
   renderChart();
   renderDetails();
@@ -107,16 +93,16 @@ function selectAlgorithm(id, reset = false, overview = false) {
 
 function renderNavigation() {
   const course = catalog.courses.find((item) => item.id === workspace.algo.course);
+  document.body.dataset.course = course.id;
+  $("#sceneLabel").textContent = sceneLabels[course.id];
   const algorithms = catalog.algorithms.filter((algo) => algo.course === course.id);
   $("#courseTabs").innerHTML = catalog.courses.map((item) =>
     `<button class="course-tab" type="button" data-course="${item.id}" aria-pressed="${item.id === course.id}">
        ${icon(item.icon)}<span>${escapeHtml(item.name)}</span></button>`
   ).join("");
-  $("#algoCount").textContent = `${algorithms.length} 项`;
   $("#algoRail").innerHTML = algorithms.map((algo) =>
     `<button class="algorithm" type="button" data-algo="${algo.id}" aria-pressed="${algo.id === workspace.algo.id}">
-       <span class="algorithm-mark">${icon(course.icon)}</span>
-       <span class="algorithm-title">${escapeHtml(algo.name)}</span>${icon("chevron")}</button>`
+       ${escapeHtml(algo.name)}</button>`
   ).join("");
   $("#breadcrumb").textContent = course.name;
   $("#algoTitle").textContent = workspace.algo.name;
@@ -156,8 +142,9 @@ function renderSettings() {
   $("#inputBlock").hidden = workspace.algo.files.length === 0;
   $("#paramFields").innerHTML = fields.filter((field) => !field.advanced).map(fieldHtml).join("");
   $("#advancedFields").innerHTML = advanced.map(fieldHtml).join("");
-  $("#advancedBox").hidden = advanced.length === 0;
-  $("#advancedBox").open = false;
+  $("#advancedToggle").hidden = advanced.length === 0;
+  $("#advancedBox").close();
+  $(".settings-body").scrollTop = 0;
   renderFiles();
 }
 
@@ -299,36 +286,50 @@ function showOriginal(images) {
   ).join("")}</div>`;
 }
 
-function applyFrame(frame) {
-  scene.setFrame(frame);
-  for (const plot of plots) {
-    plot.setFrame(workspace?.view === "input" ? null : frame?.kind === "window" && workspace?.view === "output"
-      ? { ...frame, track: "duration", x: frame.durationIndex, window: null }
-      : frame);
-  }
-}
-
 function plotChart(host, model, domain) {
   const plot = mountChart(host, model, domain);
   plots.push(plot);
-  plot.setFrame(playback.current());
+  return plot;
 }
 
 function renderComparison(result) {
-  const { comparison, comparisonLabel } = result.presentation;
+  const { comparison, comparisonLabel, windows } = result.presentation;
   $("#chartTitle").textContent = comparisonLabel || "算例对照";
   const grid = document.createElement("div");
   grid.className = comparison.length === 1 ? "comparison single" : "comparison";
-  for (const { label, model, domain } of comparison) {
+  const charts = comparison.map(({ label, model, domain }) => {
     const panel = document.createElement("section");
     const heading = document.createElement("h4");
     const plot = document.createElement("div");
     heading.textContent = label;
     panel.append(heading, plot);
     grid.append(panel);
-    plotChart(plot, model, domain);
-  }
+    return plotChart(plot, model, domain);
+  });
   $("#chartMount").replaceChildren(grid);
+  if (!windows?.length) return;
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "window-picker";
+  const label = document.createElement("label");
+  label.textContent = "统计时段";
+  const select = document.createElement("select");
+  select.replaceChildren(...windows.map((item, index) => new Option(item.title, index)));
+  select.value = workspace.selectedWindow;
+  const details = document.createElement("span");
+  label.append(select);
+  toolbar.append(label, details);
+  grid.before(toolbar);
+
+  const showWindow = () => {
+    const selection = Number(select.value);
+    workspace.selectedWindow = selection;
+    const window = windows[selection];
+    charts[0].setWindow(window.range);
+    details.textContent = `${window.start} 至 ${window.end} · 梯形法 ${valueText(window.volume)} 万m³`;
+  };
+  select.addEventListener("change", showWindow);
+  showWindow();
 }
 
 function renderChart() {
@@ -336,7 +337,6 @@ function renderChart() {
   plots = [];
   const context = workspace;
   const result = context.result;
-  $(".analysis-grid").dataset.hasResult = String(Boolean(result?.ok));
   const files = context.algo.files;
   const focused = document.activeElement;
   const views = [{ value: "input", label: viewKey.input }, { value: "output", label: viewKey.output }];
@@ -372,7 +372,7 @@ function renderChart() {
     } else if (preview?.kind === "shapefile") {
       emptyChart("空间数据已就绪", "运行计算后查看流域边界、站点与泰森多边形。");
     } else if (preview) {
-      emptyChart("暂无可绘制的数值序列", "展开下方数据预览查看文件内容。");
+      emptyChart("暂无可绘制的数值序列", "可通过「查看输入记录」查看文件内容。");
     } else if (file?.loading) {
       emptyChart("正在读取输入数据", file.name, true);
     } else if (file?.error) {
@@ -387,7 +387,7 @@ function renderChart() {
         : truncated ? `曲线使用预览的前 ${preview.rows.length} 行，计算使用完整文件` : file.name;
       $("#chartFoot").hidden = false;
       $("#chartFoot").innerHTML = `<div class="chart-footer-note">${escapeHtml(caption)}</div>
-        <details><summary>查看输入记录</summary>${compactTable(preview)}</details>`;
+        <button type="button" class="detail-button" data-detail="input">查看输入记录</button>`;
     }
     return;
   }
@@ -408,9 +408,9 @@ function renderChart() {
   }
   if (context.view === "output" && result.presentation?.map) {
     $("#chartTitle").textContent = "泰森多边形控制区";
-    const map = mountStationMap($("#chartMount"), result.presentation.map, playback.seek);
-    plots.push(map);
-    map.setFrame(playback.current());
+    plots.push(mountStationMap($("#chartMount"), result.presentation.map, context.selectedStation, (index) => {
+      context.selectedStation = index;
+    }));
     return;
   }
   if (context.view === "original" || (!result.groups.length && result.images?.length)) {
@@ -427,7 +427,6 @@ function renderChart() {
   $("#chartTitle").textContent = group.label;
   setChoices($("#chartGroups"), result.groups.map((item, index) => ({ value: index, label: item.label })), context.outputGroup, "group");
   plotChart($("#chartMount"), group.chart);
-  if (playback.current()?.kind === "window") applyFrame(playback.current());
   const { table } = group;
   $("#chartFoot").hidden = false;
   const points = table.rows.length < table.total_rows
@@ -438,32 +437,52 @@ function renderChart() {
     ${table.csv_url ? `<a class="download-link" href="${escapeHtml(table.csv_url)}" download>${icon("download")} 下载 CSV</a>` : ""}`;
 }
 
-function revealMobileResult() {
-  if (!window.matchMedia("(max-width: 630px)").matches) return;
-  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const target = $("#playback").hidden ? $(".chart-panel") : $(".hero");
-  target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
-}
-
 function renderDetails() {
   const result = workspace.result;
   const host = $("#outputDetails");
+  const metrics = $("#outputMetrics");
   host.hidden = !result;
+  metrics.hidden = !result?.summary?.length;
+  $('#workspaceTabs [data-pane="metrics"]').disabled = metrics.hidden;
+  if (metrics.hidden && $(".workspace").dataset.pane === "metrics") showPane("chart");
   if (!result) {
     host.replaceChildren();
+    metrics.replaceChildren();
     return;
   }
   const summary = (result.summary || []).map((item) =>
     `<div><dt>${escapeHtml(item.label)}</dt><dd>${escapeHtml(valueText(item.value))}<span>${escapeHtml(item.unit)}</span></dd></div>`
   ).join("");
-  const tables = (result.tables || []).map((table) =>
-    `<section><h4>${escapeHtml(table.title)}</h4>${compactTable(table)}</section>`
-  ).join("");
-  host.innerHTML = `${summary ? `<h4 class="summary-heading">关键指标</h4><dl class="summary-grid">${summary}</dl>` : ""}
-    <div class="detail-stack">
-      ${tables ? `<details><summary>结果数据与下载</summary><div class="table-stack">${tables}</div></details>` : ""}
-      ${result.stdout ? `<details ${result.ok ? "" : "open"}><summary>计算日志</summary><pre>${escapeHtml(result.stdout)}</pre></details>` : ""}
-    </div>`;
+  metrics.innerHTML = summary ? `<h2 id="summaryHeading">关键指标</h2><dl class="summary-grid">${summary}</dl>` : "";
+  host.innerHTML = [
+    result.tables?.length && '<button class="detail-button" type="button" data-detail="tables">结果数据与下载</button>',
+    result.stdout && '<button class="detail-button" type="button" data-detail="log">计算日志</button>',
+  ].filter(Boolean).join("");
+  host.hidden = !host.children.length;
+}
+
+function openDetails(kind) {
+  const preview = workspace.files[workspace.fileKey]?.preview;
+  const result = workspace.result;
+  let title;
+  let content;
+  if (kind === "input" && preview) {
+    title = "输入记录";
+    content = compactTable(preview);
+  } else if (kind === "tables" && result?.tables?.length) {
+    title = "结果数据与下载";
+    content = `<div class="table-stack">${result.tables.map((table) =>
+      `<section><h3>${escapeHtml(table.title)}</h3>${compactTable(table)}</section>`
+    ).join("")}</div>`;
+  } else if (kind === "log" && result?.stdout) {
+    title = "计算日志";
+    content = `<pre>${escapeHtml(result.stdout)}</pre>`;
+  } else {
+    return;
+  }
+  $("#detailsTitle").textContent = title;
+  $("#detailsBody").innerHTML = content;
+  $("#detailsDialog").showModal();
 }
 
 function markEdited() {
@@ -490,8 +509,9 @@ function collectParams() {
   for (const input of $$("[data-field]")) {
     const { badInput, rangeUnderflow, rangeOverflow } = input.validity;
     if (badInput || rangeUnderflow || rangeOverflow) {
-      const details = input.closest("details");
-      if (details) details.open = true;
+      showPane("settings");
+      const dialog = input.closest("dialog");
+      if (dialog && !dialog.open) dialog.showModal();
       input.focus();
       throw new Error(`请检查「${input.labels[0].textContent}」的输入范围`);
     }
@@ -532,9 +552,8 @@ async function runAlgorithm() {
   context.changed = false;
   context.view = "output";
   context.outputGroup = 0;
-  playback.load();
-  renderScene();
-  if (!location.hash) history.replaceState(null, "", `#${context.algo.id}`);
+  context.selectedWindow = 0;
+  context.selectedStation = 0;
   updateRunState();
   renderChart();
   renderDetails();
@@ -549,7 +568,9 @@ async function runAlgorithm() {
     const groups = resultCharts(context.algo.id, chartTables, params, visuals);
     const presentation = buildPresentation(context.algo, chartTables, groups, visuals, params, curvePreview);
     context.result = { ...data, groups, presentation };
-    if (context.view === "output" && presentation.comparison.length) context.view = "compare";
+    if (context.view === "output" && presentation.comparison.length && !presentation.preferCombined) {
+      context.view = "compare";
+    }
   } catch (error) {
     context.result = { ...error.payload, ok: false, error: error.message, groups: [] };
     if (workspace === context) toast("运行失败", error.message, true);
@@ -559,8 +580,7 @@ async function runAlgorithm() {
     if (workspace === context) {
       renderChart();
       renderDetails();
-      playback.load(context.result?.presentation?.modes);
-      revealMobileResult();
+      showPane("chart", true);
     }
   }
 }
@@ -580,15 +600,21 @@ function activateChoice(target, key, action) {
 }
 
 function bindEvents() {
-  $("#heroLink").addEventListener("click", (event) => {
+  $(".skip-link").addEventListener("click", (event) => {
     event.preventDefault();
     $("#workbench").focus();
   });
   $("#courseTabs").addEventListener("click", ({ target }) => activateChoice(target, "course", (id) => {
     const first = catalog.algorithms.find((algo) => algo.course === id);
-    if (first && (workspace.algo.course !== id || $(".hero").dataset.scene === "basin")) selectAlgorithm(first.id);
+    if (first && workspace.algo.course !== id) selectAlgorithm(first.id);
   }));
   $("#algoRail").addEventListener("click", ({ target }) => activateChoice(target, "algo", selectAlgorithm));
+  $("#workspaceTabs").addEventListener("click", ({ target }) => buttonAction(target, "pane", (pane) => showPane(pane)));
+  $("#advancedToggle").addEventListener("click", () => $("#advancedBox").showModal());
+  $(".chart-actions").addEventListener("click", ({ target }) => buttonAction(target, "detail", openDetails));
+  $("#detailsDialog").addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) event.currentTarget.close();
+  });
   $("#viewSwitch").addEventListener("click", ({ target }) => activateChoice(target, "view", (view) => {
     workspace.view = view;
     renderChart();
@@ -607,7 +633,7 @@ function bindEvents() {
     event.preventDefault();
     runAlgorithm();
   });
-  $("#runForm").addEventListener("input", ({ target }) => {
+  document.addEventListener("input", ({ target }) => {
     if (!target.matches("[data-field]")) return;
     markEdited();
     if (target.matches("[data-column]") && workspace.view === "input") {
@@ -616,7 +642,7 @@ function bindEvents() {
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (!event.repeat && event.key === "Enter" && (event.ctrlKey || event.metaKey) && !$("#lightbox").open) {
+    if (!event.repeat && event.key === "Enter" && (event.ctrlKey || event.metaKey) && !$("dialog[open]")) {
       event.preventDefault();
       runAlgorithm();
     }
@@ -630,7 +656,7 @@ function bindEvents() {
   list.addEventListener("click", ({ target }) => {
     if (buttonAction(target, "preview-file", (key) => {
       chooseFile(key);
-      if (window.matchMedia("(max-width: 630px)").matches) $(".chart-panel").scrollIntoView();
+      showPane("chart", true);
     })) return;
     if (buttonAction(target, "upload", (key) => $(`[data-file-input="${key}"]`, list).click())) return;
     buttonAction(target, "clear", (key) => {
@@ -682,8 +708,6 @@ function bindEvents() {
 }
 
 async function init() {
-  scene = createScene($("#sceneOverlay"), $("#sceneImage"));
-  playback = createPlayback($("#playback"), $("#sceneReadouts"), applyFrame);
   bindEvents();
   $("#runIcon").innerHTML = icon("play");
   api("/api/health").then((health) => setEngine(health.ok, health.ok ? "本地引擎在线" : "本地引擎离线"))
@@ -693,9 +717,7 @@ async function init() {
     const linked = catalog.algorithms.find((algo) => algo.id === location.hash.slice(1));
     const initial = linked || catalog.algorithms[0];
     if (!initial) throw new Error("算法目录为空");
-    $("#catalogMetrics").innerHTML = `<div><strong>${catalog.courses.length}</strong><span>门课程</span></div>
-      <div><strong>${catalog.algorithms.length}</strong><span>项算法</span></div>`;
-    selectAlgorithm(initial.id, false, !linked);
+    selectAlgorithm(initial.id);
   } catch (error) {
     $("#algoTitle").textContent = "无法加载算法目录";
     $("#algoDescription").textContent = error.message;

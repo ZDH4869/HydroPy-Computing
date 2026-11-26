@@ -5,13 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#091522">
-  <meta name="description" content="HydroLab 水文计算助手。分析洪水过程、流域雨量与水库调洪，回放真实算例的计算结果。">
+  <meta name="description" content="HydroLab 水文计算助手。查看洪水过程、流域面雨量、水库调洪和真实算例的计算结果。">
   <title>HydroLab · 水文计算助手</title>
   <link rel="stylesheet" href="/static/styles.css">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2C8 8 5 12 5 15a7 7 0 0 0 14 0c0-3-3-7-7-13Z' fill='%2366e7f5'/%3E%3C/svg%3E">
   <script type="module" src="/static/app.js"></script>
 </head>
-<body>
+<body data-course="engineering">
+  <div class="backplate" aria-hidden="true"></div>
   <a class="skip-link" href="#workbench">跳到工作区</a>
   <header class="topbar">
     <div class="topbar-inner">
@@ -26,105 +27,94 @@
     </div>
   </header>
 
-  <main class="layout">
-    <section class="hero" aria-labelledby="pageTitle">
-      <img class="scene-image" id="sceneImage" src="/static/scenes/basin.webp" alt="" fetchpriority="high">
-      <canvas id="sceneOverlay" aria-hidden="true"></canvas>
-      <div class="hero-content">
-        <p class="hero-label" id="heroLabel">水利水电工程 · 水文计算</p>
-        <h1 id="pageTitle">水文计算助手</h1>
-        <p class="hero-description" id="heroDescription">从洪水观测、河道演算到水库调洪。</p>
-        <a class="hero-link" id="heroLink" href="#workbench">进入工作区 <span aria-hidden="true">↓</span></a>
+  <main class="layout" id="workbench" tabindex="-1">
+    <div class="workspace" data-pane="settings">
+      <header class="workspace-intro">
+        <p class="course-label" id="breadcrumb">三门水文课程的计算工作台</p>
+        <h1>水文计算助手</h1>
+        <h2 id="algoTitle">正在加载算法</h2>
+        <p id="algoDescription"></p>
+      </header>
+
+      <div class="algorithm-nav">
+        <span class="algorithm-label" id="algorithmHeading">算法</span>
+        <nav id="algoRail" aria-labelledby="algorithmHeading"></nav>
       </div>
-      <div class="hero-metrics" id="catalogMetrics" aria-label="课程和算法数量" hidden></div>
-      <dl class="scene-readouts" id="sceneReadouts" aria-label="当前回放数据" hidden></dl>
-      <span id="sceneLabel" class="scene-caption">流域场景示意</span>
-    </section>
-    <div class="playback" id="playback" role="group" aria-label="算例回放" hidden>
-      <div class="playback-actions">
-        <button type="button" data-play aria-label="播放" aria-pressed="false">▶</button>
-        <button type="button" data-restart aria-label="返回起点">↶</button>
-        <span data-playback-label></span>
+
+      <div class="workspace-tabs" id="workspaceTabs" role="group" aria-label="工作区视图">
+        <button type="button" data-pane="settings" aria-controls="settingsPanel" aria-pressed="true">算例配置</button>
+        <button type="button" data-pane="chart" aria-controls="chartPanel" aria-pressed="false">图表</button>
+        <button type="button" data-pane="metrics" aria-controls="outputMetrics" aria-pressed="false" disabled>关键指标</button>
       </div>
-      <select data-mode aria-label="统计时段" hidden></select>
-      <input id="playhead" type="range" min="0" max="1" step="1" value="0" aria-label="回放位置">
-      <output for="playhead" aria-live="off"></output>
-      <select data-speed aria-label="播放速度">
-        <option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option>
-      </select>
-    </div>
 
-    <div class="workspace" id="workbench" tabindex="-1">
-      <aside class="algorithm-nav" aria-labelledby="algorithmHeading">
-        <div class="rail-heading">
-          <h2 id="algorithmHeading">算法目录</h2>
-          <span id="algoCount"></span>
-        </div>
-        <nav id="algoRail" aria-label="当前课程的算法"></nav>
-        <div class="rail-note">
-          <span class="status-dot ready"></span>
-          <span>文件与计算结果保存在本机</span>
-        </div>
-      </aside>
-
-      <section class="analysis" aria-labelledby="algoTitle">
-        <header class="analysis-heading">
-          <p class="crumb" id="breadcrumb">工作台</p>
-          <h2 id="algoTitle">正在加载算法</h2>
-          <p id="algoDescription"></p>
-        </header>
-        <div class="analysis-grid">
-          <section class="panel chart-panel" aria-labelledby="chartTitle">
-            <div class="chart-heading">
-              <div>
-                <h3 id="chartTitle">过程线</h3>
-                <p id="chartMeta"></p>
-              </div>
-              <div class="view-switch" id="viewSwitch" aria-label="图表视图"></div>
-            </div>
-            <div id="fileTabs" class="choice-row" aria-label="输入文件" hidden></div>
-            <div id="chartGroups" class="choice-row" aria-label="图表分组" hidden></div>
-            <div id="chartMount" class="chart-mount"></div>
-            <div id="chartFoot" class="chart-foot" hidden></div>
-            <div id="outputDetails" class="output-details" hidden></div>
-          </section>
-
-          <aside class="panel settings" aria-labelledby="settingsTitle">
-            <div class="settings-heading">
-              <h3 id="settingsTitle">算例配置</h3>
+      <div class="workspace-side">
+        <aside class="panel settings" id="settingsPanel" aria-labelledby="settingsTitle">
+          <div class="settings-heading">
+            <h2 id="settingsTitle">算例配置</h2>
+            <div class="settings-actions">
+              <button type="button" class="text-button" id="advancedToggle" aria-haspopup="dialog" hidden>高级参数</button>
               <button type="button" class="text-button" id="resetButton" disabled>恢复示例</button>
             </div>
-            <form id="runForm" novalidate>
-              <div class="settings-body">
-                <div class="settings-block" id="inputBlock">
-                  <h4>输入数据</h4>
-                  <div id="fileList" class="file-list"></div>
-                </div>
-                <div class="settings-block" id="paramsBlock">
-                  <h4>计算参数</h4>
-                  <div class="field-grid" id="paramFields"></div>
-                  <details class="advanced" id="advancedBox" hidden>
-                    <summary>高级参数</summary>
-                    <div class="field-grid" id="advancedFields"></div>
-                  </details>
-                </div>
+          </div>
+          <form id="runForm" novalidate>
+            <div class="settings-body">
+              <div class="settings-block" id="inputBlock">
+                <h3>输入数据</h3>
+                <div id="fileList" class="file-list"></div>
               </div>
-              <div class="run-zone">
-                <button class="run-button" id="runButton" type="submit" disabled>
-                  <span id="runIcon" aria-hidden="true"></span><strong id="runLabel">运行计算</strong><kbd>Ctrl / ⌘ + ↵</kbd>
-                </button>
-                <div id="runStatus" class="run-status" role="status">正在连接本地工作台</div>
+              <div class="settings-block" id="paramsBlock">
+                <h3>计算参数</h3>
+                <div class="field-grid" id="paramFields"></div>
               </div>
-            </form>
-          </aside>
+            </div>
+            <div class="run-zone">
+              <button class="run-button" id="runButton" type="submit" disabled>
+                <span id="runIcon" aria-hidden="true"></span><strong id="runLabel">运行计算</strong><kbd>Ctrl / ⌘ + ↵</kbd>
+              </button>
+              <div id="runStatus" class="run-status" role="status">正在连接本地工作台</div>
+            </div>
+          </form>
+        </aside>
+
+        <aside class="panel result-summary" id="outputMetrics" aria-labelledby="summaryHeading" hidden></aside>
+      </div>
+
+      <section class="panel chart-panel" id="chartPanel" aria-labelledby="chartTitle">
+        <div class="chart-heading">
+          <div>
+            <h2 id="chartTitle">过程线</h2>
+            <p id="chartMeta"></p>
+          </div>
+          <div class="view-switch" id="viewSwitch" aria-label="图表视图"></div>
+        </div>
+        <div id="fileTabs" class="choice-row" aria-label="输入文件" hidden></div>
+        <div id="chartGroups" class="choice-row" aria-label="图表分组" hidden></div>
+        <div id="chartMount" class="chart-mount"></div>
+        <div class="chart-actions">
+          <div id="chartFoot" class="chart-foot" hidden></div>
+          <div id="outputDetails" class="output-details" hidden></div>
         </div>
       </section>
     </div>
 
-    <footer><span>HydroLab · 水利水电工程课程项目</span><a href="/api/catalog" target="_blank" rel="noreferrer">API 目录 ↗</a></footer>
+    <footer><span id="sceneLabel">水文观测场景示意</span><a href="/api/catalog" target="_blank" rel="noreferrer">API 目录 ↗</a></footer>
   </main>
 
   <div class="toast-stack" id="toastStack" aria-live="polite"></div>
+  <dialog class="detail-dialog" id="advancedBox" aria-labelledby="advancedTitle">
+    <div class="dialog-heading">
+      <h2 id="advancedTitle">高级参数</h2>
+      <form method="dialog"><button type="submit" class="icon-button" aria-label="关闭高级参数">×</button></form>
+    </div>
+    <div id="advancedFields" class="field-grid dialog-content"></div>
+  </dialog>
+  <dialog class="detail-dialog" id="detailsDialog" aria-labelledby="detailsTitle">
+    <div class="dialog-heading">
+      <h2 id="detailsTitle"></h2>
+      <form method="dialog"><button type="submit" class="icon-button" aria-label="关闭详情">×</button></form>
+    </div>
+    <div id="detailsBody" class="dialog-content"></div>
+  </dialog>
   <dialog id="lightbox" aria-labelledby="lightboxCaption">
     <button type="button" class="close-button" id="lightboxClose" aria-label="关闭">×</button>
     <figure><img id="lightboxImage" alt=""><figcaption id="lightboxCaption"></figcaption></figure>

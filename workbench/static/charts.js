@@ -79,7 +79,7 @@ export function makeChart(table, spec) {
   });
   return series.length ? {
     axis, series, yLabel: spec.unit || spec.y[0], bars: Boolean(spec.bars),
-    scatter: Boolean(spec.scatter), track: spec.track || "series",
+    scatter: Boolean(spec.scatter),
   } : null;
 }
 
@@ -102,12 +102,12 @@ export function inputCharts(table, xColumn, fileKey) {
 export function resultCharts(id, tables, config, visuals = {}) {
   const flow = (label, ...y) => ({ label, unit: "流量 (m³/s)", y });
   const reservoir = [
-    flow("入库／下泄", "入库流量Q/(m³·s⁻¹)", "下泄流量q/(m³·s⁻¹)"),
+    flow("入库与下泄过程", "入库流量Q/(m³·s⁻¹)", "下泄流量q/(m³·s⁻¹)"),
     { label: "水位", unit: "水位 (m)", y: ["水库水位Z/m"] },
     { label: "库容", unit: "库容 (万m³)", y: ["水库存水量V/万m³"] },
   ].map((spec) => ({ ...spec, x: "时间t/h" }));
   const volume = [{
-    label: "时段洪量", unit: "洪量 (万m³)", x: "统计时段", bars: true, track: "duration",
+    label: "时段洪量", unit: "洪量 (万m³)", x: "统计时段", bars: true,
     y: ["梯形法洪量/万m³", "辛普森法洪量/万m³", "插值积分洪量/万m³"],
   }];
   const curve = tables[0];
@@ -119,7 +119,7 @@ export function resultCharts(id, tables, config, visuals = {}) {
     eng_max_volume: volume,
     eng_area_integral: volume,
     muskingum_xk: [
-      { label: "蓄量关系", x: "加权流量Q'", y: ["蓄水量S"], unit: "蓄水量 S", scatter: true, track: "relation" },
+      { label: "蓄量关系", x: "加权流量Q'", y: ["蓄水量S"], unit: "蓄水量 S", scatter: true },
       { label: "参数扫描", index: 1, x: "X", y: ["相关系数"] },
     ],
     muskingum_route: [flow("上下游过程", "上游流量I", "下游流量Q")],
@@ -248,7 +248,7 @@ export function mountChart(host, model, domain = {}) {
   const [lowX, highX] = domain.x || [ordered[0].value, ordered.at(-1).value];
   const padX = model.bars ? 0.5 : lowX === highX ? 1 : 0;
   let current = null;
-  let frame = null;
+  let highlight = null;
   let geometry;
   const seriesExtents = model.series.map((series) => extent(series.values));
   const paint = (index) => model.series[index].color || COLORS[index % COLORS.length];
@@ -330,11 +330,11 @@ export function mountChart(host, model, domain = {}) {
     ctx.beginPath();
     ctx.rect(left - 4, top - 4, right - left + 8, bottom - top + 8);
     ctx.clip();
-    if (frame?.track === model.track && frame.window) {
-      const [start, stop] = frame.window.map(x);
-      ctx.fillStyle = frame.final ? "#f3b06643" : "#66e7f521";
+    if (highlight) {
+      const [start, stop] = highlight.map(x);
+      ctx.fillStyle = "#f3b06643";
       ctx.fillRect(start, top, stop - start, bottom - top);
-      ctx.fillStyle = frame.final ? "#f3b066" : "#66e7f5";
+      ctx.fillStyle = "#f3b066";
       ctx.fillRect(start, top, 1, bottom - top);
       ctx.fillRect(stop, top, 1, bottom - top);
     }
@@ -394,20 +394,7 @@ export function mountChart(host, model, domain = {}) {
         ctx.lineCap = "round";
         ctx.strokeStyle = color;
         ctx.setLineDash(DASHES[series.index % DASHES.length]);
-        const progress = frame?.track === model.track && ["gauge", "reservoir", "reach", "rain"].includes(frame.kind)
-          ? x(frame.x) : null;
-        if (progress !== null) ctx.globalAlpha = 0.55;
         ctx.stroke();
-        ctx.globalAlpha = 1;
-        if (progress !== null && progress > left) {
-          ctx.save();
-          ctx.beginPath();
-          ctx.rect(left - 3, top - 4, Math.min(right, progress) - left + 3, bottom - top + 8);
-          ctx.clip();
-          trace();
-          ctx.stroke();
-          ctx.restore();
-        }
         ctx.setLineDash([]);
         if (points.length <= 35) {
           ctx.fillStyle = color;
@@ -420,18 +407,6 @@ export function mountChart(host, model, domain = {}) {
       });
     });
 
-    if (frame?.track === model.track && numeric(frame.x) &&
-        frame.x >= lowX && frame.x <= highX) {
-      const px = x(frame.x);
-      ctx.strokeStyle = "#f3b066";
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(px, top);
-      ctx.lineTo(px, bottom);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
     if (current !== null) {
       const { index, value } = ordered[current];
       const px = x(value);
@@ -509,8 +484,8 @@ export function mountChart(host, model, domain = {}) {
   observer.observe(stage);
   draw();
   const destroy = () => observer.disconnect();
-  destroy.setFrame = (next) => {
-    frame = next;
+  destroy.setWindow = (range) => {
+    highlight = range;
     draw();
   };
   return destroy;
