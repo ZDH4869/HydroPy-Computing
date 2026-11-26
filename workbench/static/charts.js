@@ -1,13 +1,8 @@
+import { barScale, categoryScale, extent, linearScale, numberLabel, position, timeLabel, timeScale } from "./chart-axes.js";
+
 const COLORS = ["#66e7f5", "#f3b066", "#85aaff", "#e299d0", "#a8dc81"];
 const DASHES = [[], [7, 4], [2, 4], [10, 4, 2, 4], [3, 3]];
 const number = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 6 });
-const axisNumber = new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 4 });
-const date = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "UTC", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-});
-const fullDate = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "UTC", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
-});
 
 const numeric = (value) => typeof value === "number" && Number.isFinite(value);
 const normalize = (name) => name.toLowerCase().replace(/\s/g, "");
@@ -16,15 +11,17 @@ const dayColumn = (name) => /^(年月日|日期|date)$/.test(normalize(name));
 
 export function timeValue(value) {
   if (typeof value !== "string") return NaN;
-  const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/.exec(value.trim());
+  const match = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/.exec(value.trim());
   if (!match) return NaN;
-  const [, y, m, d, h = "0", min = "0", s = "0"] = match;
-  return Date.UTC(+y, +m - 1, +d, +h, +min, +s);
+  const [, y, m, d, h = "0", min = "0", s = "0", ms = "0"] = match;
+  const time = new Date(0);
+  time.setUTCFullYear(+y, +m - 1, +d);
+  return time.setUTCHours(+h, +min, +s, +ms.padEnd(3, "0"));
 }
 
 function axisValues(table, xColumn, useRowIndex) {
   const { columns, rows } = table;
-  const rowAxis = () => ({ label: "数据行", values: rows.map((_, row) => row + 1), kind: "number" });
+  const rowAxis = () => ({ label: "数据行", values: rows.map((_, row) => row + 1), kind: "number", integer: true });
   if (useRowIndex) return rowAxis();
   const day = columns.findIndex(dayColumn);
   const hour = columns.indexOf("时");
@@ -46,7 +43,11 @@ function axisValues(table, xColumn, useRowIndex) {
     const source = rows.map((row) => row[index]);
     const present = source.filter((value) => value !== null && value !== "");
     if (present.length && present.every(numeric)) {
-      return { label: columns[index], values: source, kind: "number" };
+      const name = columns[index];
+      return {
+        label: /^时间t?\/h$/i.test(name) ? "时间 (h)" : name,
+        values: source, kind: "number", integer: /时段/.test(name) && present.every(Number.isInteger),
+      };
     }
     const dates = source.map(timeValue);
     if (dates.some(numeric) && present.every((value) => numeric(timeValue(value)))) {
@@ -79,7 +80,7 @@ export function makeChart(table, spec) {
   });
   return series.length ? {
     axis, series, yLabel: spec.unit || spec.y[0], bars: Boolean(spec.bars),
-    scatter: Boolean(spec.scatter),
+    barAndLine: spec.bars === "overlay", scatter: Boolean(spec.scatter), peak: Boolean(spec.peak),
   } : null;
 }
 
@@ -102,9 +103,9 @@ export function inputCharts(table, xColumn, fileKey) {
 export function resultCharts(id, tables, config, visuals = {}) {
   const flow = (label, ...y) => ({ label, unit: "流量 (m³/s)", y });
   const reservoir = [
-    flow("入库与下泄过程", "入库流量Q/(m³·s⁻¹)", "下泄流量q/(m³·s⁻¹)"),
-    { label: "水位", unit: "水位 (m)", y: ["水库水位Z/m"] },
-    { label: "库容", unit: "库容 (万m³)", y: ["水库存水量V/万m³"] },
+    { ...flow("入库与下泄过程", "入库流量Q/(m³·s⁻¹)", "下泄流量q/(m³·s⁻¹)"), peak: true },
+    { label: "水位", unit: "水位 (m)", y: ["水库水位Z/m"], color: "#81e2ab", peak: true },
+    { label: "库容", unit: "库容 (万m³)", y: ["水库存水量V/万m³"], color: "#c9a9f4" },
   ].map((spec) => ({ ...spec, x: "时间t/h" }));
   const volume = [{
     label: "时段洪量", unit: "洪量 (万m³)", x: "统计时段", bars: true,
@@ -114,22 +115,22 @@ export function resultCharts(id, tables, config, visuals = {}) {
   const exactTime = visuals.interpolation_times?.length >= (curve?.rows.length || 1) ? "精确时间" : undefined;
   const useRowIndex = !exactTime && config.freq === "30min";
   const specs = {
-    eng_linear_interp: [{ ...flow("等间隔过程", "Q"), x: exactTime, useRowIndex }],
+    eng_linear_interp: [{ ...flow("等间隔过程", "Q"), x: exactTime, useRowIndex, peak: true }],
     eng_multi_interp: [{ ...flow("插值方法对比", "Q_线性插值", "Q_最近邻插值", "Q_多项式插值", "Q_样条插值"), x: exactTime, useRowIndex }],
     eng_max_volume: volume,
     eng_area_integral: volume,
     muskingum_xk: [
-      { label: "蓄量关系", x: "加权流量Q'", y: ["蓄水量S"], unit: "蓄水量 S", scatter: true },
-      { label: "参数扫描", index: 1, x: "X", y: ["相关系数"] },
+      { label: "蓄量关系", x: "加权流量Q'", y: ["蓄水量S"], unit: "蓄水量 S (m³)", scatter: true },
+      { label: "参数扫描", index: 1, x: "X", y: ["相关系数"], peak: true },
     ],
     muskingum_route: [flow("上下游过程", "上游流量I", "下游流量Q")],
     nash_nk: [
-      { label: "净雨过程", x: "时间 (h)", y: ["净雨量"], unit: "净雨量 (mm)", bars: true, source: visuals.rain_response, color: "#85aaff" },
+      { label: "净雨过程", x: "时间 (h)", y: ["净雨量"], unit: "净雨量 (mm)", source: visuals.rain_response, color: "#85aaff" },
       { label: "出口流量", x: "时间 (h)", y: ["出口流量"], unit: "流量 (m³/s)", source: visuals.rain_response },
     ],
-    nash_duh: [flow("时段单位线", "时段单位线(m³/s)")],
-    sherman_derive: [flow("Sherman 单位线", "单位线纵坐标(m³/s)")],
-    sherman_outlet: [flow("出口流量", "计算流量(m³/s)", "实际流量(m³/s)")],
+    nash_duh: [{ ...flow("时段单位线", "时段单位线(m³/s)"), bars: "overlay", peak: true }],
+    sherman_derive: [{ ...flow("Sherman 单位线", "单位线纵坐标(m³/s)"), peak: true }],
+    sherman_outlet: [{ ...flow("出口流量", "计算流量(m³/s)", "实际流量(m³/s)"), peak: true }],
     flood_trial: reservoir,
     flood_rk4: reservoir,
     flood_curve_interp: (curve?.columns || []).filter((column) => column !== config.x_col && column !== curve.columns[0])
@@ -197,33 +198,37 @@ function fitCanvas(canvas, width, height) {
   return ctx;
 }
 
-function scaleTicks(min, max) {
-  const raw = (max - min) / 4;
-  const magnitude = 10 ** Math.floor(Math.log10(raw));
-  const step = ([1, 2, 2.5, 5, 10].find((item) => item * magnitude >= raw) || 10) * magnitude;
-  const start = Math.floor(min / step) * step;
-  const end = Math.ceil(max / step) * step;
-  return Array.from({ length: Math.round((end - start) / step) + 1 }, (_, index) => start + index * step);
-}
-
-export function showX(axis, value, full = false) {
-  if (axis.kind === "time") return (full ? fullDate : date).format(value);
-  if (axis.kind === "category") return String(axis.categories[value] ?? "—");
-  return (full ? number : axisNumber).format(value);
-}
-
-function extent(values) {
-  let min = Infinity;
-  let max = -Infinity;
-  for (const value of values) {
-    if (!numeric(value)) continue;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
+function datumLabel(axis, value) {
+  if (axis.kind === "time") {
+    const iso = new Date(value).toISOString();
+    const length = value % 1000 ? 23 : value % 60000 ? 19 : 16;
+    return iso.slice(0, length).replace("T", " ");
   }
-  return [min, max];
+  if (axis.kind === "category") return String(axis.categories[value] ?? "—");
+  return Number.isInteger(value) ? number.format(value) : String(value);
 }
 
-export function mountChart(host, model, domain = {}) {
+function minSpacing(points, fallback) {
+  let gap = Infinity;
+  for (let index = 1; index < points.length; index++) {
+    const distance = points[index].value - points[index - 1].value;
+    if (distance > 0) gap = Math.min(gap, distance);
+  }
+  return Number.isFinite(gap) ? gap : fallback;
+}
+
+function horizontalScale(axis, points, width, bars) {
+  const min = points[0].value;
+  const max = points.at(-1).value;
+  const spacing = bars ? minSpacing(points, axis.kind === "time" ? 1800000 : Math.abs(min) * 0.04 || 1) : 0;
+  const divisions = Math.max(2, Math.min(14, Math.floor(width / (axis.kind === "time" ? 92 : 62))));
+  if (axis.kind === "category") return { ...categoryScale(min, max, divisions), spacing: 1 };
+  if (axis.kind === "time") return { ...timeScale(min, max, divisions, spacing), spacing };
+  return bars ? { ...barScale(min, max, divisions, spacing, axis.integer), spacing }
+    : linearScale(min, max, divisions, { padding: 0.035, integer: axis.integer });
+}
+
+export function mountChart(host, model) {
   const legend = document.createElement("div");
   legend.className = "chart-legend";
   const stage = document.createElement("div");
@@ -245,12 +250,13 @@ export function mountChart(host, model, domain = {}) {
   const axis = model.axis;
   const ordered = axis.values.map((value, index) => ({ value, index })).filter((item) => numeric(item.value))
     .sort((a, b) => a.value - b.value);
-  const [lowX, highX] = domain.x || [ordered[0].value, ordered.at(-1).value];
-  const padX = model.bars ? 0.5 : lowX === highX ? 1 : 0;
   let current = null;
+  let visible = ordered;
   let highlight = null;
   let geometry;
   const seriesExtents = model.series.map((series) => extent(series.values));
+  const peaks = model.peak
+    ? model.series.map((series, index) => series.values.indexOf(seriesExtents[index][1])) : [];
   const paint = (index) => model.series[index].color || COLORS[index % COLORS.length];
 
   model.series.forEach((series, index) => {
@@ -266,10 +272,19 @@ export function mountChart(host, model, domain = {}) {
       if (enabled[index] && enabled.filter(Boolean).length === 1) return;
       enabled[index] = !enabled[index];
       button.setAttribute("aria-pressed", String(enabled[index]));
+      current = null;
+      updateVisible();
       draw();
     });
     legend.append(button);
   });
+
+  function updateVisible() {
+    visible = ordered.filter(({ index }) =>
+      model.series.some((series, i) => enabled[i] && numeric(series.values[index])));
+  }
+
+  updateVisible();
 
   function draw() {
     const width = stage.clientWidth;
@@ -280,51 +295,51 @@ export function mountChart(host, model, domain = {}) {
     ctx.font = lineFont;
     const live = model.series.map((series, index) => ({ ...series, index })).filter((_, index) => enabled[index]);
     const limits = live.map((series) => seriesExtents[series.index]);
-    let lo = domain.y?.[0] ?? Math.min(...limits.map(([min]) => min));
-    let hi = domain.y?.[1] ?? Math.max(...limits.map(([, max]) => max));
-    if (model.bars || (lo > 0 && hi > lo * 2)) lo = Math.min(lo, 0);
-    if (model.bars) hi = Math.max(hi, 0);
-    if (lo === hi) {
-      const padding = Math.abs(lo * 0.05) || 1;
-      lo -= padding;
-      hi += padding;
-    }
-    const ticks = scaleTicks(lo, hi);
-    const left = Math.max(36, ...ticks.map((value) => ctx.measureText(axisNumber.format(value)).width + 12));
-    const right = width - 19;
-    const top = 30;
-    const bottom = height - 50;
-    const x = (value) => left + (value - lowX + padX) / (highX - lowX + padX * 2) * (right - left);
-    const y = (value) => bottom - (value - ticks[0]) / (ticks.at(-1) - ticks[0]) * (bottom - top);
-    geometry = { left, right, top, bottom };
+    const lo = Math.min(...limits.map(([min]) => min));
+    const hi = Math.max(...limits.map(([, max]) => max));
+    const top = 24;
+    const bottom = height - 38;
+    const yDivisions = Math.max(2, Math.min(12, Math.floor((bottom - top) / 42)));
+    const yScale = linearScale(lo, hi, yDivisions, { zero: model.bars });
+    const labels = yScale.values.map((value) => numberLabel(value, yScale.step));
+    const left = Math.min(width * 0.38, Math.max(39, ...labels.map((label) => ctx.measureText(label).width + 13)));
+    const right = width - 15;
+    const xScale = horizontalScale(axis, visible, right - left, model.bars);
+    const x = (value) => left + position(value, xScale.range) * (right - left);
+    const y = (value) => bottom - position(value, yScale.range) * (bottom - top);
+    geometry = { left, right, top, bottom, xRange: xScale.range };
 
-    ctx.fillStyle = "#a6bbce";
-    ctx.fillText(model.yLabel, left, 15, right - left);
-    ticks.forEach((value) => {
-      const py = y(value);
-      ctx.strokeStyle = "#23394d";
+    ctx.fillStyle = "#c6d9e8";
+    ctx.fillText(model.yLabel, left, 13, right - left);
+    const grid = (x1, y1, x2, y2, color) => {
       ctx.beginPath();
-      ctx.moveTo(left, py);
-      ctx.lineTo(right, py);
+      ctx.strokeStyle = color;
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
+    };
+    yScale.values.forEach((value, index) => {
+      const py = y(value);
+      grid(left, py, right, py, "#afcfe433");
       ctx.textAlign = "right";
-      ctx.fillText(axisNumber.format(value), left - 8, py + 3);
+      ctx.fillText(labels[index], left - 7, py + 3, left - 9);
     });
-    ctx.textAlign = "center";
-    const divisions = Math.max(1, Math.min(width < 430 ? 3 : 5, ordered.length - 1));
-    const tickAt = (index) => lowX + index / divisions * (highX - lowX);
-    const xTicks = lowX === highX ? [lowX] : [...new Set(Array.from({ length: divisions + 1 }, (_, index) =>
-      domain.x ? tickAt(index) : ordered[nearest(tickAt(index))].value))];
-    xTicks.forEach((value, index) => {
+    grid(left, bottom, right, bottom, "#adcce77a");
+    let lastLabelEnd = 0;
+    for (const value of xScale.values) {
       const px = x(value);
-      ctx.fillStyle = "#a6bbce";
-      if (!model.bars && xTicks.length > 1) {
-        ctx.textAlign = index === 0 ? "left" : index === xTicks.length - 1 ? "right" : "center";
-      }
-      ctx.fillText(showX(axis, value), px, bottom + 18, (right - left) / Math.max(1, divisions));
-    });
+      grid(px, top, px, bottom, "#afcfe41a");
+      const label = axis.kind === "time" ? timeLabel(value, xScale)
+        : axis.kind === "category" ? datumLabel(axis, value) : numberLabel(value, xScale.step);
+      const widthOfLabel = Math.min(ctx.measureText(label).width, right - left);
+      const start = Math.max(4, Math.min(px - widthOfLabel / 2, width - widthOfLabel - 4));
+      if (start < lastLabelEnd + 7) continue;
+      ctx.textAlign = "left";
+      ctx.fillText(label, start, bottom + 16, widthOfLabel);
+      lastLabelEnd = start + widthOfLabel;
+    }
     ctx.textAlign = "right";
-    ctx.fillText(axis.label, right, height - 10, right - left);
+    ctx.fillText(axis.label, right, height - 6, right - left);
 
     ctx.save();
     ctx.beginPath();
@@ -341,21 +356,22 @@ export function mountChart(host, model, domain = {}) {
     live.forEach((series, order) => {
       const color = paint(series.index);
       if (model.bars) {
-        const pitch = (right - left) / Math.max(1, ordered.length);
-        const barWidth = Math.min(30, pitch * 0.74 / live.length);
+        const pitch = position(xScale.spacing, [0, xScale.range[1] - xScale.range[0]]) * (right - left);
+        const barWidth = Math.min(34, Math.max(1, pitch * 0.78 / live.length));
         series.values.forEach((value, index) => {
           if (!numeric(value)) return;
-          ctx.fillStyle = color;
+          ctx.fillStyle = model.barAndLine ? color + "45" : color;
           const px = x(axis.values[index]) + barWidth * (order - live.length / 2);
           const py = y(Math.max(0, value));
-          ctx.fillRect(px + 1, py, Math.max(1, barWidth - 2), Math.max(1, Math.abs(y(value) - y(0))));
+          ctx.fillRect(px + 0.5, py, Math.max(1, barWidth - 1), Math.abs(y(value) - y(0)));
         });
-        return;
+        if (!model.barAndLine) return;
       }
       const segments = [];
       let segment = [];
-      series.values.forEach((value, index) => {
-        if (numeric(value)) segment.push([x(axis.values[index]), y(value)]);
+      ordered.forEach(({ value: timestamp, index }) => {
+        const value = series.values[index];
+        if (numeric(value)) segment.push([x(timestamp), y(value)]);
         else if (segment.length) {
           segments.push(segment);
           segment = [];
@@ -377,7 +393,7 @@ export function mountChart(host, model, domain = {}) {
           ctx.beginPath();
           points.forEach(([px, py], index) => index ? ctx.lineTo(px, py) : ctx.moveTo(px, py));
         };
-        if (order === 0 && points.length > 1) {
+        if (order === 0 && !model.bars && points.length > 1) {
           trace();
           const gradient = ctx.createLinearGradient(0, top, 0, bottom);
           gradient.addColorStop(0, color + "38");
@@ -405,10 +421,20 @@ export function mountChart(host, model, domain = {}) {
           });
         }
       });
+      const peak = peaks[series.index];
+      if (peak >= 0) {
+        ctx.beginPath();
+        ctx.arc(x(axis.values[peak]), y(series.values[peak]), 4.5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#e4f7ff";
+        ctx.stroke();
+      }
     });
 
     if (current !== null) {
-      const { index, value } = ordered[current];
+      const { index, value } = visible[current];
       const px = x(value);
       ctx.strokeStyle = "#a3bed2";
       ctx.setLineDash([3, 4]);
@@ -418,12 +444,12 @@ export function mountChart(host, model, domain = {}) {
       ctx.stroke();
       ctx.setLineDash([]);
       const title = document.createElement("strong");
-      title.textContent = showX(axis, value, true);
+      title.textContent = datumLabel(axis, value);
       const rows = live.map((series) => {
         const entry = document.createElement("span");
         const exact = series.values[index];
-        entry.textContent = series.name + "  " + (numeric(exact) ? number.format(exact) : "—");
-        if (numeric(exact) && !model.bars) {
+        entry.textContent = series.name + "  " + (numeric(exact) ? (Number.isInteger(exact) ? number.format(exact) : exact) : "—");
+        if (numeric(exact) && (!model.bars || model.barAndLine)) {
           ctx.fillStyle = paint(series.index);
           ctx.beginPath();
           ctx.arc(px, y(exact), 4.5, 0, Math.PI * 2);
@@ -445,13 +471,13 @@ export function mountChart(host, model, domain = {}) {
 
   function nearest(value) {
     let start = 0;
-    let end = ordered.length - 1;
+    let end = visible.length - 1;
     while (start < end) {
       const middle = Math.floor((start + end) / 2);
-      if (ordered[middle].value < value) start = middle + 1;
+      if (visible[middle].value < value) start = middle + 1;
       else end = middle;
     }
-    if (start > 0 && Math.abs(ordered[start - 1].value - value) < Math.abs(ordered[start].value - value)) return start - 1;
+    if (start > 0 && Math.abs(visible[start - 1].value - value) < Math.abs(visible[start].value - value)) return start - 1;
     return start;
   }
 
@@ -459,9 +485,10 @@ export function mountChart(host, model, domain = {}) {
     if (!geometry) return;
     const px = event.clientX - canvas.getBoundingClientRect().left;
     const py = event.clientY - canvas.getBoundingClientRect().top;
-    const { left, right, top, bottom } = geometry;
+    const { left, right, top, bottom, xRange } = geometry;
+    const ratio = (px - left) / (right - left);
     const next = px < left || px > right || py < top || py > bottom ? null
-      : nearest(lowX - padX + (px - left) / (right - left) * (highX - lowX + padX * 2));
+      : nearest(xRange[0] * (1 - ratio) + xRange[1] * ratio);
     if (current !== next) {
       current = next;
       draw();
@@ -475,8 +502,8 @@ export function mountChart(host, model, domain = {}) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     if (event.key === "Home") current = 0;
-    else if (event.key === "End") current = ordered.length - 1;
-    else current = Math.max(0, Math.min(ordered.length - 1, (current ?? -1) + (event.key === "ArrowRight" ? 1 : -1)));
+    else if (event.key === "End") current = visible.length - 1;
+    else current = Math.max(0, Math.min(visible.length - 1, (current ?? -1) + (event.key === "ArrowRight" ? 1 : -1)));
     draw();
     readout.textContent = Array.from(tooltip.children, (node) => node.textContent).join("，");
   });
